@@ -1,88 +1,174 @@
-# 职场PUA咨询与应对系统后端
+# FkCareerPUA 后端服务
 
-这是一个基于Python实现的专业职场PUA（心理操控）咨询与应对系统后端服务。系统提供两种模式：PUA场景模拟和专业应对解决方案，帮助用户理解和应对职场中的PUA行为。
+这是一个基于 Python 的职场 PUA 应对建议系统后端服务。该系统提供智能化的职场 PUA 场景分析和应对建议，帮助用户更好地处理职场中的不合理要求和不公平对待。
 
 ## 功能特点
 
-- **用户认证系统**：支持邮箱注册、登录、验证码验证和密码管理
-- **聊天系统**：保存用户与AI助手的对话历史记录
-- **AI模拟模式**：模拟职场PUA行为，帮助用户认识和理解PUA话术
-- **AI解决方案模式**：提供专业的反PUA建议，帮助用户应对职场PUA情境
-- **数据持久化**：使用SQLite数据库存储用户信息与聊天记录
-- **安全认证**：基于JWT的身份验证和授权系统
+- 🔐 完整的用户认证系统（注册、登录、验证码）
+- 🤖 基于 OpenAI 的智能建议生成
+- 💬 实时对话功能
+- 📧 邮件验证码系统
+- 🔄 会话历史记录
+- 🛡️ JWT 身份验证
+- 📊 SQLite 数据持久化
 
 ## 技术栈
 
-- **基础框架**：Python标准库中的HTTPServer
-- **AI对话**：DeepSeek API（大模型服务）
-- **数据库**：SQLAlchemy ORM + SQLite
-- **认证**：PyJWT
-- **邮件服务**：SMTP客户端
-- **部署支持**：WSGI适配（支持PythonAnywhere等平台部署）
+- Python 3.x
+- SQLAlchemy (ORM)
+- OpenAI API
+- JWT 认证
+- SQLite 数据库
+- SMTP 邮件服务
 
-## 安装说明
+## 项目结构
 
-1. 克隆代码库到本地
-2. 安装依赖包：
-```bash
-pip install -r requirements.txt
 ```
-3. 配置环境变量（创建`.env`文件）：
-```
-DEEPSEEK_API_KEY=your_deepseek_api_key
-JWT_SECRET=your_jwt_secret_key
-EMAIL_FROM=your_email@example.com
-EMAIL_USER=your_email_user
-EMAIL_PASSWORD=your_email_password
-SMTP_SERVER=your_smtp_server
-SMTP_PORT=your_smtp_port
+backend/
+├── server.py          # 主服务器文件
+├── models.py          # 数据库模型
+├── ai_service.py      # AI 服务集成
+├── requirements.txt   # 项目依赖
+├── .env              # 环境变量配置
+├── templates/        # 邮件模板
+└── users.db          # SQLite 数据库文件
 ```
 
-## 本地运行
+## 环境要求
+
+- Python 3.x
+- 所有依赖包（见 requirements.txt）
+- OpenAI API 密钥
+- 邮件服务器配置
+
+## 安装步骤
+
+1. 克隆项目到本地
+2. 创建并激活虚拟环境（推荐）：
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # Linux/Mac
+   # 或
+   .\venv\Scripts\activate  # Windows
+   ```
+3. 安装依赖：
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. 配置环境变量：
+   - 复制 `.env.example` 为 `.env`
+   - 填写必要的环境变量（API密钥、邮件配置等）
+
+## 运行服务
 
 ```bash
 python server.py
 ```
-服务器将在本地8000端口启动
 
-## API文档
+服务器将在 http://localhost:8000 上启动
 
-### 用户认证
+## API 接口文档
 
-- **POST /send_code**：发送验证码
-- **POST /verify_code**：验证验证码
-- **POST /register**：用户注册
-- **POST /login**：用户登录
-- **POST /change_password**：修改密码
+### 认证相关
 
-### 聊天功能
+#### 发送验证码
+- **POST** `/send_code`
+- 请求体：
+  ```json
+  {
+    "email": "user@example.com"
+  }
+  ```
 
-- **POST /**：创建新的聊天
-- **POST /chat/message**：发送聊天消息
-- **POST /chat/follow_up**：继续对话
-- **GET /chat/:id**：获取聊天历史
+#### 验证码登录
+- **POST** `/verify_code`
+- 请求体：
+  ```json
+  {
+    "email": "user@example.com",
+    "code": "123456"
+  }
+  ```
 
-### 用户信息
+#### 用户注册
+- **POST** `/register`
+- 请求体：
+  ```json
+  {
+    "email": "user@example.com",
+    "password": "password123"
+  }
+  ```
 
-- **GET /user/info**：获取用户信息
+### 聊天相关
 
-## 部署指南
+#### 发送消息
+- **POST** `/chat/message`
+- 请求头：需要 JWT Token
+- 请求体：
+  ```json
+  {
+    "message": "用户消息",
+    "chatId": "会话ID",
+    "mode": "simulation"
+  }
+  ```
 
-项目支持标准WSGI部署，详细部署步骤请参考`pythonanywhere_setup.md`文件。
+#### 获取聊天历史
+- **GET** `/chat/{chatId}`
+- 请求头：需要 JWT Token
 
-## 数据库结构
+### 用户相关
 
-- **users**: 用户信息表
-- **verification_codes**: 验证码表
-- **chats**: 聊天记录表
-- **messages**: 消息表
+#### 获取用户信息
+- **GET** `/user/info`
+- 请求头：需要 JWT Token
 
-## 安全注意事项
+#### 修改密码
+- **POST** `/change_password`
+- 请求头：需要 JWT Token
+- 请求体：
+  ```json
+  {
+    "oldPassword": "旧密码",
+    "newPassword": "新密码"
+  }
+  ```
 
-- 确保妥善保管环境变量中的敏感信息
-- 生产环境中建议使用HTTPS
-- 定期更新依赖以修复潜在安全问题
+## 环境变量配置
+
+在 `.env` 文件中配置以下变量：
+
+```
+OPENAI_API_KEY=你的OpenAI API密钥
+JWT_SECRET=JWT密钥
+SMTP_SERVER=邮件服务器地址
+SMTP_PORT=邮件服务器端口
+SMTP_USERNAME=邮件用户名
+SMTP_PASSWORD=邮件密码
+```
+
+## 开发工具
+
+- `create_test_user.py`: 创建测试用户
+- `migrate_db.py`: 数据库迁移工具
+- `check_table.py`: 数据库表检查工具
+
+## 注意事项
+
+1. 确保 OpenAI API 密钥配置正确
+2. 邮件服务器配置需要正确设置
+3. 生产环境部署时请修改 CORS 设置
+4. 建议使用环境变量管理敏感信息
+
+## 贡献指南
+
+1. Fork 项目
+2. 创建特性分支
+3. 提交更改
+4. 推送到分支
+5. 创建 Pull Request
 
 ## 许可证
 
-私有软件，未经授权不得使用
+[MIT License](LICENSE)
