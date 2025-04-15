@@ -18,14 +18,30 @@ load_dotenv()
 # 创建数据库会话
 Session = sessionmaker(bind=engine)
 
+def get_allowed_origins():
+    """从环境变量获取允许的域名列表"""
+    # 从环境变量获取允许的域名，多个域名用逗号分隔
+    allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:5173,https://main.d2xmmf7vqo14pz.amplifyapp.com')
+    # 分割并去除空白字符
+    return [origin.strip() for origin in allowed_origins.split(',')]
+
 class AuthHandler(BaseHTTPRequestHandler):
     def _set_response_headers(self):
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', 'http://localhost:5173')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        self.send_header('Access-Control-Max-Age', '86400')
+        
+        # 获取请求的Origin
+        origin = self.headers.get('Origin')
+        # 获取允许的域名列表
+        allowed_origins = get_allowed_origins()
+        
+        # 如果请求的Origin在允许列表中，则设置对应的CORS头
+        if origin in allowed_origins:
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+            self.send_header('Access-Control-Max-Age', '86400')
+        
         self.end_headers()
 
     def do_OPTIONS(self):
