@@ -128,11 +128,23 @@ class AuthHandler(BaseHTTPRequestHandler):
                     payload = jwt.decode(token, os.getenv('JWT_SECRET', 'your-secret-key'), algorithms=['HS256'])
                     user_id = payload['user_id']
                     
+                    # 检查是否提供了mode参数
+                    if 'mode' not in data:
+                        response = {"status": "error", "message": "缺少mode参数，请选择对话模式：'simulation'(场景模拟)或'solution'(解决方案)"}
+                        self.wfile.write(json.dumps(response).encode('utf-8'))
+                        return
+                    
+                    # 验证mode参数值是否有效
+                    if data['mode'] not in ['simulation', 'solution']:
+                        response = {"status": "error", "message": "mode参数值无效，只能是'simulation'(场景模拟)或'solution'(解决方案)"}
+                        self.wfile.write(json.dumps(response).encode('utf-8'))
+                        return
+                    
                     # 完全修改后的处理逻辑
                     print("-" * 50)
                     print(f"处理聊天消息，用户ID: {user_id}")
                     print(f"接收到的完整数据: {data}")
-                    print(f"Mode参数: {data.get('mode')}")
+                    print(f"Mode参数: {data['mode']}")
                     
                     # 直接调用handle_chat_message处理
                     ai_response = self.handle_chat_message(data)
@@ -170,7 +182,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                             response = {
                                 "status": "success",
                                 "advice": ai_response['advice'],
-                                "mode": data.get('mode', 'simulation')  # 将模式返回给前端
+                                "mode": data['mode']  # 将选择的模式返回给前端
                             }
                         except Exception as e:
                             session.rollback()
@@ -199,6 +211,18 @@ class AuthHandler(BaseHTTPRequestHandler):
                     # 验证 token
                     payload = jwt.decode(token, os.getenv('JWT_SECRET', 'your-secret-key'), algorithms=['HS256'])
                     user_id = payload['user_id']
+                    
+                    # 检查是否提供了mode参数
+                    if 'mode' not in data:
+                        response = {"status": "error", "message": "缺少mode参数，请选择对话模式：'simulation'(场景模拟)或'solution'(解决方案)"}
+                        self.wfile.write(json.dumps(response).encode('utf-8'))
+                        return
+                    
+                    # 验证mode参数值是否有效
+                    if data['mode'] not in ['simulation', 'solution']:
+                        response = {"status": "error", "message": "mode参数值无效，只能是'simulation'(场景模拟)或'solution'(解决方案)"}
+                        self.wfile.write(json.dumps(response).encode('utf-8'))
+                        return
                     
                     # 生成回复
                     ai_response = generate_pua_response(data)
@@ -237,7 +261,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                             response = {
                                 "status": "success",
                                 "advice": ai_response['advice'],
-                                "mode": data.get('mode', 'simulation')  # 将模式返回给前端
+                                "mode": data['mode']  # 将选择的模式返回给前端
                             }
                         except Exception as e:
                             session.rollback()
@@ -247,10 +271,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                             session.close()
                     else:
                         print("AI生成失败:", ai_response)  # 添加错误日志
-                        response = {
-                            "status": "error",
-                            "message": ai_response.get('message', '生成回复失败')
-                        }
+                        response = ai_response
                 except jwt.ExpiredSignatureError:
                     response = {"status": "error", "message": "登录已过期"}
                 except jwt.InvalidTokenError:
@@ -267,6 +288,18 @@ class AuthHandler(BaseHTTPRequestHandler):
                     payload = jwt.decode(token, os.getenv('JWT_SECRET', 'your-secret-key'), algorithms=['HS256'])
                     user_id = payload['user_id']
                     
+                    # 检查是否提供了mode参数
+                    if 'mode' not in data:
+                        response = {"status": "error", "message": "缺少mode参数，请选择对话模式：'simulation'(场景模拟)或'solution'(解决方案)"}
+                        self.wfile.write(json.dumps(response).encode('utf-8'))
+                        return
+                    
+                    # 验证mode参数值是否有效
+                    if data['mode'] not in ['simulation', 'solution']:
+                        response = {"status": "error", "message": "mode参数值无效，只能是'simulation'(场景模拟)或'solution'(解决方案)"}
+                        self.wfile.write(json.dumps(response).encode('utf-8'))
+                        return
+                    
                     # 生成回复
                     ai_response = generate_pua_response(data)
                     
@@ -274,10 +307,12 @@ class AuthHandler(BaseHTTPRequestHandler):
                     if ai_response['status'] == 'success':
                         session = Session()
                         try:
-                            # 创建新的聊天
+                            # 创建新的聊天，将mode保存到标题中以便前端显示
+                            mode_text = "场景模拟" if data['mode'] == 'simulation' else "解决方案"
+                            title_prefix = f"[{mode_text}] "
                             chat = Chat(
                                 user_id=user_id,
-                                title=', '.join(data.get('puaType', [])) if 'puaType' in data else '新对话'
+                                title=title_prefix + (', '.join(data.get('puaType', [])) if 'puaType' in data else '新对话')
                             )
                             session.add(chat)
                             session.flush()  # 获取chat.id
@@ -303,7 +338,8 @@ class AuthHandler(BaseHTTPRequestHandler):
                             response = {
                                 "status": "success",
                                 "advice": ai_response['advice'],
-                                "mode": data.get('mode', 'simulation')  # 将模式返回给前端
+                                "mode": data['mode'],  # 返回选择的模式给前端
+                                "chatId": chat.id  # 添加chatId返回给前端
                             }
                             
                         except Exception as e:
@@ -627,6 +663,13 @@ class AuthHandler(BaseHTTPRequestHandler):
             print("接收到的数据:", data)
             print(f"前端传入的模式值: {data.get('mode')}")  # 打印前端传递的模式
 
+            # 检查mode参数是否有效
+            if 'mode' not in data:
+                return {"status": "error", "message": "缺少mode参数，请选择对话模式：'simulation'(场景模拟)或'solution'(解决方案)"}
+            
+            if data['mode'] not in ['simulation', 'solution']:
+                return {"status": "error", "message": "mode参数值无效，只能是'simulation'(场景模拟)或'solution'(解决方案)"}
+
             # 检查是否是后续对话（有 chatId 和 message）
             if 'chatId' in data and 'message' in data:
                 # 构建后续对话的数据格式
@@ -634,7 +677,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                     'type': 'follow_up',
                     'message': data['message'],
                     'chatId': data['chatId'],
-                    'mode': data.get('mode', 'simulation')  # 确保传递mode参数
+                    'mode': data['mode']  # 使用传入的明确模式
                 }
                 print(f"构建的chat_data: {chat_data}")  # 打印构建的数据
                 print(f"后续对话的模式: {chat_data['mode']}")  # 添加明确的模式日志
@@ -650,7 +693,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                     'severity': data['severity'],
                     'perpetrator': data['perpetrator'],
                     'description': data['description'],
-                    'mode': data.get('mode', 'simulation')  # 确保传递mode参数
+                    'mode': data['mode']  # 使用传入的明确模式
                 }
                 print(f"构建的chat_data: {chat_data}")  # 打印构建的数据
                 print(f"初始对话的模式: {chat_data['mode']}")  # 添加明确的模式日志
@@ -662,8 +705,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                 return response
                 
             # 确保响应包含正确的模式
-            if 'mode' not in response:
-                response['mode'] = chat_data['mode']
+            response['mode'] = data['mode']
                 
             return response
             
