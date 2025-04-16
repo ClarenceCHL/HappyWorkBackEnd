@@ -66,6 +66,7 @@ class Chat(Base):
     user_id = Column(Integer, ForeignKey('users.id'))
     title = Column(String(200))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_activity = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # 关系
     user = relationship("User", back_populates="chats")
@@ -75,7 +76,7 @@ class Message(Base):
     __tablename__ = 'messages'
     
     id = Column(Integer, primary_key=True)
-    conversation_id = Column(Integer, ForeignKey('chats.id'))
+    chat_id = Column(Integer, ForeignKey('chats.id'))  # 修正字段名为chat_id
     role = Column(String(20))  # 'user' 或 'assistant'
     content = Column(String)
     form_data = Column(String, nullable=True)  # 存储表单数据的JSON字符串

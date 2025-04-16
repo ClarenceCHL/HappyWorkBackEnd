@@ -11,6 +11,21 @@ from dotenv import load_dotenv
 from ai_service import generate_pua_response
 from werkzeug.security import generate_password_hash
 import sqlite3
+import threading
+import time
+from cleanup_chats import cleanup_old_chats
+import logging
+
+# 设置日志配置
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(os.path.join(os.path.dirname(__file__), 'server.log'))
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # 加载环境变量
 load_dotenv()
@@ -51,6 +66,8 @@ class AuthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self._set_response_headers()
         
+        print(f"接收到GET请求: {self.path}")
+        
         # 验证 token
         auth_header = self.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
@@ -67,8 +84,11 @@ class AuthHandler(BaseHTTPRequestHandler):
             # 检查是否是获取用户信息的请求
             if self.path == '/user/info':
                 response = self.handle_get_user_info(user_id)
-            # 检查是否是获取聊天历史的请求
-            elif self.path.startswith('/chat/'):
+            # 检查是否是获取所有聊天历史的请求
+            elif self.path == '/chat/history':
+                response = self.handle_get_all_chats(user_id)
+            # 检查是否是获取单个聊天记录的请求
+            elif self.path.startswith('/chat/') and self.path != '/chat/history':
                 chat_id = self.path.split('/')[-1]
                 if not chat_id:
                     response = {"status": "error", "message": "缺少聊天ID"}
@@ -162,19 +182,25 @@ class AuthHandler(BaseHTTPRequestHandler):
                             
                             # 保存用户消息
                             user_message = Message(
-                                conversation_id=chat_id,
+                                chat_id=chat_id,
                                 role='user',
-                                content=data.get('message', '')
+                                content=data.get('message', ''),
+                                form_data=json.dumps(data.get('images', []))
                             )
                             session.add(user_message)
                             
                             # 保存AI回复
                             ai_message = Message(
-                                conversation_id=chat_id,
+                                chat_id=chat_id,
                                 role='assistant',
                                 content=ai_response['advice']
                             )
                             session.add(ai_message)
+                            
+                            # 更新聊天的最后活动时间
+                            chat = session.query(Chat).filter(Chat.id == chat_id).first()
+                            if chat:
+                                chat.last_activity = datetime.now(UTC)
                             
                             session.commit()
                             
@@ -240,7 +266,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                             
                             # 保存用户消息
                             user_message = Message(
-                                conversation_id=chat_id,
+                                chat_id=chat_id,
                                 role='user',
                                 content=data.get('message', ''),
                                 form_data=json.dumps(data.get('images', []))
@@ -249,11 +275,16 @@ class AuthHandler(BaseHTTPRequestHandler):
                             
                             # 保存AI回复
                             ai_message = Message(
-                                conversation_id=chat_id,
+                                chat_id=chat_id,
                                 role='assistant',
                                 content=ai_response['advice']
                             )
                             session.add(ai_message)
+                            
+                            # 更新聊天的最后活动时间
+                            chat = session.query(Chat).filter(Chat.id == chat_id).first()
+                            if chat:
+                                chat.last_activity = datetime.now(UTC)
                             
                             session.commit()
                             
@@ -319,7 +350,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                             
                             # 保存用户消息
                             user_message = Message(
-                                conversation_id=chat.id,
+                                chat_id=chat.id,
                                 role='user',
                                 content=f"遭遇类型：{', '.join(data.get('puaType', []))}\n严重程度：{data.get('severity', '')}\n施害者：{', '.join(data.get('perpetrator', []))}\n\n{data.get('description', '')}",
                                 form_data=json.dumps(data.get('images', []))
@@ -328,11 +359,14 @@ class AuthHandler(BaseHTTPRequestHandler):
                             
                             # 保存AI回复
                             ai_message = Message(
-                                conversation_id=chat.id,
+                                chat_id=chat.id,
                                 role='assistant',
                                 content=ai_response['advice']
                             )
                             session.add(ai_message)
+                            
+                            # 更新聊天的最后活动时间
+                            chat.last_activity = datetime.now(UTC)
                             
                             session.commit()
                             response = {
@@ -405,6 +439,65 @@ class AuthHandler(BaseHTTPRequestHandler):
             }
             
         except Exception as e:
+            return {"status": "error", "message": str(e)}
+        finally:
+            session.close()
+
+    def handle_get_all_chats(self, user_id):
+        """获取用户的所有聊天历史记录"""
+        session = Session()
+        try:
+            print(f"正在获取用户ID:{user_id}的所有聊天历史")
+            
+            # 获取用户的所有聊天，按创建时间倒序排列（最新的在前）
+            chats = session.query(Chat).filter(
+                Chat.user_id == user_id
+            ).order_by(Chat.created_at.desc()).all()
+            
+            print(f"找到{len(chats)}条聊天记录")
+            
+            # 格式化返回数据
+            chat_list = []
+            for chat in chats:
+                # 获取最后一条消息作为预览
+                last_message = None
+                if chat.messages:
+                    last_message = chat.messages[-1]
+                
+                # 提取聊天类型（从标题中）
+                chat_type = 'solution'  # 默认为解决方案模式
+                if chat.title and '[场景模拟]' in chat.title:
+                    chat_type = 'simulation'
+                
+                # 构建消息列表
+                messages = []
+                for msg in chat.messages:
+                    messages.append({
+                        "role": msg.role,
+                        "content": msg.content,
+                        "timestamp": msg.created_at.isoformat(),
+                        "images": json.loads(msg.form_data) if msg.form_data else []
+                    })
+                
+                chat_data = {
+                    "id": chat.id,
+                    "title": chat.title,
+                    "timestamp": chat.created_at.isoformat(),
+                    "preview": last_message.content if last_message else "",
+                    "type": chat_type,
+                    "messages": messages
+                }
+                chat_list.append(chat_data)
+            
+            print(f"成功格式化{len(chat_list)}条聊天记录")
+            
+            return {
+                "status": "success",
+                "chats": chat_list
+            }
+            
+        except Exception as e:
+            print(f"获取聊天历史失败: {str(e)}")
             return {"status": "error", "message": str(e)}
         finally:
             session.close()
@@ -771,11 +864,57 @@ def create_user(identifier, password):
     finally:
         session.close()
 
-def run(server_class=HTTPServer, handler_class=AuthHandler, port=8000):
+def cleanup_task(interval_hours=24, chat_retention_days=30):
+    """
+    定期运行清理任务的后台线程函数
+    
+    参数:
+        interval_hours (int): 清理任务的间隔小时数，默认24小时
+        chat_retention_days (int): 聊天记录保留天数，默认30天
+    """
+    logger.info(f"聊天记录清理任务已启动 - 保留{chat_retention_days}天内的聊天，每{interval_hours}小时清理一次")
+    
+    while True:
+        try:
+            # 执行清理任务
+            logger.info("开始执行定期清理任务...")
+            cleanup_old_chats(days=chat_retention_days)
+            logger.info(f"清理任务完成，将在{interval_hours}小时后再次执行")
+            
+            # 等待指定间隔时间
+            time.sleep(interval_hours * 3600)  # 转换为秒
+        except Exception as e:
+            logger.error(f"清理任务执行出错: {str(e)}")
+            # 即使出错也等待一段时间后重试
+            time.sleep(3600)  # 出错后等待1小时再重试
+
+def run(server_class=HTTPServer, handler_class=AuthHandler, port=8000, enable_cleanup=True,
+         cleanup_interval=24, retention_days=30):
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
-    print(f'Starting server on port {port}...')
+    
+    # 启动清理后台线程
+    if enable_cleanup:
+        cleanup_thread = threading.Thread(
+            target=cleanup_task,
+            args=(cleanup_interval, retention_days),
+            daemon=True  # 设为守护线程，主程序结束时自动结束
+        )
+        cleanup_thread.start()
+        logger.info(f"聊天记录自动清理线程已启动（保留{retention_days}天，间隔{cleanup_interval}小时）")
+    
+    logger.info(f'Starting server on port {port}...')
     httpd.serve_forever()
 
 if __name__ == '__main__':
-    run()
+    # 从环境变量获取配置参数
+    cleanup_enabled = os.getenv('ENABLE_CHAT_CLEANUP', 'true').lower() == 'true'
+    cleanup_interval = int(os.getenv('CHAT_CLEANUP_INTERVAL_HOURS', '24'))
+    retention_days = int(os.getenv('CHAT_RETENTION_DAYS', '30'))
+    
+    run(
+        port=int(os.getenv('PORT', '8000')),
+        enable_cleanup=cleanup_enabled,
+        cleanup_interval=cleanup_interval,
+        retention_days=retention_days
+    )

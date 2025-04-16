@@ -11,6 +11,7 @@
 - 🔄 会话历史记录
 - 🛡️ JWT 身份验证
 - 📊 SQLite 数据持久化
+- 🧹 聊天记录自动清理功能（可配置保留天数）
 
 ## 技术栈
 
@@ -28,6 +29,7 @@ backend/
 ├── server.py          # 主服务器文件
 ├── models.py          # 数据库模型
 ├── ai_service.py      # AI 服务集成
+├── cleanup_chats.py   # 聊天记录清理脚本
 ├── requirements.txt   # 项目依赖
 ├── .env              # 环境变量配置
 ├── templates/        # 邮件模板
@@ -140,12 +142,27 @@ python server.py
 在 `.env` 文件中配置以下变量：
 
 ```
-OPENAI_API_KEY=你的OpenAI API密钥
+# API密钥
+DEEPSEEK_API_KEY=你的DeepSeek API密钥
 JWT_SECRET=JWT密钥
+
+# 邮件配置
+EMAIL_FROM=发件人邮箱
+EMAIL_USER=邮箱用户名
+EMAIL_PASSWORD=邮箱密码
 SMTP_SERVER=邮件服务器地址
 SMTP_PORT=邮件服务器端口
-SMTP_USERNAME=邮件用户名
-SMTP_PASSWORD=邮件密码
+
+# CORS配置
+ALLOWED_ORIGINS=允许的域名列表，用逗号分隔
+
+# 服务器配置
+PORT=服务器端口号
+
+# 聊天记录自动清理配置
+ENABLE_CHAT_CLEANUP=true        # 设置为false可禁用自动清理
+CHAT_RETENTION_DAYS=30          # 聊天记录保留天数
+CHAT_CLEANUP_INTERVAL_HOURS=24  # 清理任务执行间隔(小时)
 ```
 
 ## 开发工具
@@ -153,6 +170,7 @@ SMTP_PASSWORD=邮件密码
 - `create_test_user.py`: 创建测试用户
 - `migrate_db.py`: 数据库迁移工具
 - `check_table.py`: 数据库表检查工具
+- `cleanup_chats.py`: 手动清理过期聊天记录
 
 ## 注意事项
 
