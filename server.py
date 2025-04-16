@@ -161,14 +161,16 @@ class AuthHandler(BaseHTTPRequestHandler):
                         return
                     
                     # 完全修改后的处理逻辑
-                    print("-" * 50)
-                    print(f"处理聊天消息，用户ID: {user_id}")
-                    print(f"接收到的完整数据: {data}")
-                    print(f"Mode参数: {data['mode']}")
+                    print("=" * 80)
+                    print(f"[/chat/message] 处理聊天消息，用户ID: {user_id}")
+                    print(f"[/chat/message] 接收到的完整数据: {data}")
+                    print(f"[/chat/message] 前端传入的Mode参数: {data['mode']}")
                     
                     # 直接调用handle_chat_message处理
                     ai_response = self.handle_chat_message(data)
-                    print(f"AI响应: {ai_response}")
+                    print(f"[/chat/message] AI响应: {ai_response}")
+                    print(f"[/chat/message] 最终使用的模式: {ai_response.get('mode')}")
+                    print("=" * 80)
                     
                     # 如果成功生成回复，保存到数据库
                     if ai_response['status'] == 'success':
@@ -208,8 +210,9 @@ class AuthHandler(BaseHTTPRequestHandler):
                             response = {
                                 "status": "success",
                                 "advice": ai_response['advice'],
-                                "mode": data['mode']  # 将选择的模式返回给前端
+                                "mode": ai_response['mode']  # 使用AI响应中的模式
                             }
+                            print(f"[/chat/message] 返回给前端的模式: {response['mode']}")
                         except Exception as e:
                             session.rollback()
                             print(f"保存消息失败: {str(e)}")
@@ -218,7 +221,6 @@ class AuthHandler(BaseHTTPRequestHandler):
                             session.close()
                     else:
                         response = ai_response
-                    
                 except jwt.ExpiredSignatureError:
                     response = {"status": "error", "message": "登录已过期"}
                 except jwt.InvalidTokenError:
@@ -238,6 +240,12 @@ class AuthHandler(BaseHTTPRequestHandler):
                     payload = jwt.decode(token, os.getenv('JWT_SECRET', 'your-secret-key'), algorithms=['HS256'])
                     user_id = payload['user_id']
                     
+                    # 添加调试日志
+                    print("=" * 80)
+                    print(f"[/chat/follow_up] 处理后续对话，用户ID: {user_id}")
+                    print(f"[/chat/follow_up] 接收到的完整数据: {data}")
+                    print(f"[/chat/follow_up] 前端传入的Mode参数: {data.get('mode')}")
+                    
                     # 检查是否提供了mode参数
                     if 'mode' not in data:
                         response = {"status": "error", "message": "缺少mode参数，请选择对话模式：'simulation'(场景模拟)或'solution'(解决方案)"}
@@ -253,29 +261,74 @@ class AuthHandler(BaseHTTPRequestHandler):
                     # 记录用户选择的确定模式
                     selected_mode = data['mode']
                     logger.info(f"后续对话使用模式: {selected_mode}")
+                    print(f"[/chat/follow_up] 初始模式: {selected_mode}")
+                    
+                    # 获取聊天ID
+                    original_chat_id = data.get('chatId')
+                    if not original_chat_id:
+                        response = {"status": "error", "message": "缺少聊天ID"}
+                        self.wfile.write(json.dumps(response).encode('utf-8'))
+                        return
+                    
+                    # 标准化处理聊天ID
+                    chat_id = normalize_chat_id(original_chat_id)
+                    print(f"[/chat/follow_up] 原始聊天ID: {original_chat_id}, 标准化后: {chat_id}")
+                    
+                    # 获取聊天信息以确定正确的模式
+                    session = Session()
+                    try:
+                        # 尝试查询聊天记录
+                        chat = session.query(Chat).filter(Chat.id == chat_id).first()
+                        print(f"[/chat/follow_up] 查询结果(id={chat_id}): {chat}")
+                        
+                        if chat is None:
+                            print(f"[/chat/follow_up] 警告：找不到聊天ID为 {chat_id} 的记录")
+                            # 直接查询最近创建的聊天，用于调试
+                            recent_chat = session.query(Chat).order_by(Chat.created_at.desc()).first()
+                            print(f"[/chat/follow_up] 最近创建的聊天: {recent_chat.id if recent_chat else None}")
+                            if recent_chat:
+                                print(f"[/chat/follow_up] 最近聊天标题: {recent_chat.title}")
+                        
+                        if chat and chat.title:
+                            print(f"[/chat/follow_up] 聊天标题: {chat.title}")
+                            # 从聊天标题判断原始模式
+                            if '[场景模拟]' in chat.title:
+                                # 强制使用场景模拟模式，修复模式切换bug
+                                selected_mode = 'simulation'
+                                print(f"[/chat/follow_up] 根据聊天标题，强制使用场景模拟模式: {selected_mode}")
+                            elif '[解决方案]' in chat.title:
+                                selected_mode = 'solution'
+                                print(f"[/chat/follow_up] 根据聊天标题，强制使用解决方案模式: {selected_mode}")
+                            else:
+                                print(f"[/chat/follow_up] 警告：聊天标题 '{chat.title}' 不包含模式信息，使用默认模式")
+                        else:
+                            print(f"[/chat/follow_up] 警告：聊天记录无标题，使用用户提供的模式: {selected_mode}")
+                    except Exception as e:
+                        print(f"[/chat/follow_up] 查询聊天记录时出错: {str(e)}")
+                        import traceback
+                        traceback.print_exc()
+                    finally:
+                        session.close()
                     
                     # 构建对话数据，确保mode参数正确传递
                     chat_data = {
                         'type': 'follow_up',
                         'message': data.get('message', ''),
-                        'chatId': data.get('chatId'),
-                        'mode': selected_mode  # 使用用户选择的明确模式
+                        'chatId': chat_id,
+                        'mode': selected_mode  # 使用确定的模式
                     }
+                    print(f"[/chat/follow_up] 构建的chat_data: {chat_data}")  # 打印构建的数据
+                    print(f"[/chat/follow_up] 最终使用的模式: {selected_mode}")  # 添加明确的模式日志
                     
                     # 生成回复
                     ai_response = generate_pua_response(chat_data)
                     logger.info(f"AI响应: {ai_response}")  # 添加日志
+                    print(f"[/chat/follow_up] AI响应模式: {ai_response.get('mode')}")
                     
                     # 如果生成成功，保存消息记录
                     if ai_response['status'] == 'success':
                         session = Session()
                         try:
-                            chat_id = data.get('chatId')
-                            if not chat_id:
-                                response = {"status": "error", "message": "缺少聊天ID"}
-                                self.wfile.write(json.dumps(response).encode('utf-8'))
-                                return
-                            
                             # 保存用户消息
                             user_message = Message(
                                 chat_id=chat_id,
@@ -306,6 +359,8 @@ class AuthHandler(BaseHTTPRequestHandler):
                                 "advice": ai_response['advice'],
                                 "mode": selected_mode  # 将用户选择的模式返回给前端
                             }
+                            print(f"[/chat/follow_up] 返回给前端的模式: {response['mode']}")
+                            print("=" * 80)
                         except Exception as e:
                             session.rollback()
                             print("保存消息失败:", str(e))  # 添加错误日志
@@ -334,6 +389,11 @@ class AuthHandler(BaseHTTPRequestHandler):
                     payload = jwt.decode(token, os.getenv('JWT_SECRET', 'your-secret-key'), algorithms=['HS256'])
                     user_id = payload['user_id']
                     
+                    print("=" * 80)
+                    print(f"[/] 处理新建咨询请求，用户ID: {user_id}")
+                    print(f"[/] 接收到的完整数据: {data}")
+                    print(f"[/] 前端传入的Mode参数: {data.get('mode')}")
+                    
                     # 检查是否提供了mode参数
                     if 'mode' not in data:
                         response = {"status": "error", "message": "缺少mode参数，请选择对话模式：'simulation'(场景模拟)或'solution'(解决方案)"}
@@ -349,6 +409,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                     # 记录用户选择的确定模式
                     selected_mode = data['mode']
                     logger.info(f"新建咨询使用模式: {selected_mode}")
+                    print(f"[/] 选择的模式: {selected_mode}")
                     
                     # 构建咨询数据，确保mode参数正确传递
                     chat_data = {
@@ -362,6 +423,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                     
                     # 生成回复
                     ai_response = generate_pua_response(chat_data)
+                    print(f"[/] AI响应: {ai_response}")
                     
                     # 如果生成成功，保存对话记录
                     if ai_response['status'] == 'success':
@@ -370,12 +432,16 @@ class AuthHandler(BaseHTTPRequestHandler):
                             # 创建新的聊天，将mode保存到标题中以便前端显示
                             mode_text = "场景模拟" if selected_mode == 'simulation' else "解决方案"
                             title_prefix = f"[{mode_text}] "
+                            chat_title = title_prefix + (', '.join(data.get('puaType', [])) if 'puaType' in data else '新对话')
+                            print(f"[/] 创建聊天标题: {chat_title}")
+                            
                             chat = Chat(
                                 user_id=user_id,
-                                title=title_prefix + (', '.join(data.get('puaType', [])) if 'puaType' in data else '新对话')
+                                title=chat_title
                             )
                             session.add(chat)
                             session.flush()  # 获取chat.id
+                            print(f"[/] 创建聊天记录，ID: {chat.id}")
                             
                             # 保存用户消息
                             user_message = Message(
@@ -398,15 +464,32 @@ class AuthHandler(BaseHTTPRequestHandler):
                             chat.last_activity = datetime.now(UTC)
                             
                             session.commit()
+                            print(f"[/] 聊天记录保存成功，ID: {chat.id}, 类型: {type(chat.id)}, 标题: {chat.title}")
+                            
+                            # 查看所有聊天，用于调试
+                            all_chats = session.query(Chat).order_by(Chat.created_at.desc()).limit(5).all()
+                            print(f"[/] 最近5条聊天记录:")
+                            for c in all_chats:
+                                print(f"[/] - ID: {c.id}, 类型: {type(c.id)}, 标题: {c.title}")
+                            
+                            # 前端传回的chatId会是什么类型？
+                            frontend_chat_id = str(int(datetime.now().timestamp() * 1000))
+                            print(f"[/] 当前时间戳(前端可能使用): {frontend_chat_id}")
+                            
                             response = {
                                 "status": "success",
                                 "advice": ai_response['advice'],
                                 "mode": selected_mode,  # 返回用户选择的模式给前端
                                 "chatId": chat.id  # 添加chatId返回给前端
                             }
+                            print(f"[/] 返回给前端的数据: {response}")
+                            print("=" * 80)
                             
                         except Exception as e:
                             session.rollback()
+                            print(f"[/] 保存对话失败: {str(e)}")
+                            import traceback
+                            traceback.print_exc()
                             response = {"status": "error", "message": f"保存对话失败: {str(e)}"}
                         finally:
                             session.close()
@@ -785,8 +868,9 @@ class AuthHandler(BaseHTTPRequestHandler):
         """处理聊天消息"""
         try:
             # 打印接收到的数据，用于调试
-            print("接收到的数据:", data)
-            print(f"前端传入的模式值: {data.get('mode')}")  # 打印前端传递的模式
+            print("=" * 80)
+            print("[handle_chat_message] 接收到的数据:", data)
+            print(f"[handle_chat_message] 前端传入的模式值: {data.get('mode')}")  # 打印前端传递的模式
 
             # 检查mode参数是否有效
             if 'mode' not in data:
@@ -797,19 +881,60 @@ class AuthHandler(BaseHTTPRequestHandler):
 
             # 记录用户最终选择的模式，确保它被正确传递
             selected_mode = data['mode']
-            print(f"用户选择的模式: {selected_mode}")
+            print(f"[handle_chat_message] 用户选择的模式: {selected_mode}")
 
             # 检查是否是后续对话（有 chatId 和 message）
             if 'chatId' in data and 'message' in data:
+                # 标准化处理聊天ID
+                original_chat_id = data['chatId']
+                chat_id = normalize_chat_id(original_chat_id)
+                print(f"[handle_chat_message] 处理后续对话，原始聊天ID: {original_chat_id}, 标准化后: {chat_id}")
+                
+                # 获取聊天信息以确定正确的模式
+                session = Session()
+                try:
+                    # 尝试查询聊天记录
+                    chat = session.query(Chat).filter(Chat.id == chat_id).first()
+                    print(f"[handle_chat_message] 查询结果(id={chat_id}): {chat}")
+                    
+                    if chat is None:
+                        print(f"[handle_chat_message] 警告：找不到聊天ID为 {chat_id} 的记录")
+                        # 直接查询最近创建的聊天，用于调试
+                        recent_chat = session.query(Chat).order_by(Chat.created_at.desc()).first()
+                        print(f"[handle_chat_message] 最近创建的聊天: {recent_chat.id if recent_chat else None}")
+                        if recent_chat:
+                            print(f"[handle_chat_message] 最近聊天标题: {recent_chat.title}")
+                    
+                    if chat and chat.title:
+                        print(f"[handle_chat_message] 聊天标题: {chat.title}")
+                        # 从聊天标题判断原始模式
+                        if '[场景模拟]' in chat.title:
+                            # 强制使用场景模拟模式，修复模式切换bug
+                            selected_mode = 'simulation'
+                            print(f"[handle_chat_message] 根据聊天标题，强制使用场景模拟模式: {selected_mode}")
+                        elif '[解决方案]' in chat.title:
+                            selected_mode = 'solution'
+                            print(f"[handle_chat_message] 根据聊天标题，强制使用解决方案模式: {selected_mode}")
+                        else:
+                            print(f"[handle_chat_message] 警告：聊天标题 '{chat.title}' 不包含模式信息，使用默认模式")
+                    else:
+                        print(f"[handle_chat_message] 警告：聊天记录无标题，使用用户提供的模式: {selected_mode}")
+                except Exception as e:
+                    print(f"[handle_chat_message] 查询聊天记录时出错: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                finally:
+                    session.close()
+                
                 # 构建后续对话的数据格式
                 chat_data = {
                     'type': 'follow_up',
                     'message': data['message'],
-                    'chatId': data['chatId'],
-                    'mode': selected_mode  # 使用用户选择的明确模式
+                    'chatId': chat_id,
+                    'mode': selected_mode  # 使用确定的模式
                 }
-                print(f"构建的chat_data: {chat_data}")  # 打印构建的数据
-                print(f"后续对话的模式: {chat_data['mode']}")  # 添加明确的模式日志
+                print(f"[handle_chat_message] 构建的chat_data: {chat_data}")  # 打印构建的数据
+                print(f"[handle_chat_message] 后续对话的最终模式: {chat_data['mode']}")  # 添加明确的模式日志
             else:
                 # 验证首次对话的必要字段
                 required_fields = ['puaType', 'severity', 'perpetrator', 'description']
@@ -824,17 +949,21 @@ class AuthHandler(BaseHTTPRequestHandler):
                     'description': data['description'],
                     'mode': selected_mode  # 使用用户选择的明确模式
                 }
-                print(f"构建的chat_data: {chat_data}")  # 打印构建的数据
-                print(f"初始对话的模式: {chat_data['mode']}")  # 添加明确的模式日志
+                print(f"[handle_chat_message] 构建的chat_data: {chat_data}")  # 打印构建的数据
+                print(f"[handle_chat_message] 初始对话的模式: {chat_data['mode']}")  # 添加明确的模式日志
             
             # 生成回复
             response = generate_pua_response(chat_data)
+            print(f"[handle_chat_message] AI响应状态: {response['status']}")
+            print(f"[handle_chat_message] AI响应模式: {response.get('mode')}")
             
             if response['status'] == 'error':
                 return response
                 
             # 确保响应包含正确的模式
             response['mode'] = selected_mode
+            print(f"[handle_chat_message] 最终返回的模式: {response['mode']}")
+            print("=" * 80)
                 
             return response
             
@@ -941,6 +1070,35 @@ def run(server_class=HTTPServer, handler_class=AuthHandler, port=8000, enable_cl
     
     logger.info(f'Starting server on port {port}...')
     httpd.serve_forever()
+
+def normalize_chat_id(chat_id_input):
+    """标准化聊天ID，处理字符串和数字格式"""
+    try:
+        # 如果是字符串且是数字形式，转换为整数
+        if isinstance(chat_id_input, str) and chat_id_input.isdigit():
+            chat_id = int(chat_id_input)
+            # 如果是13位时间戳，前端可能使用时间戳作为ID
+            if len(chat_id_input) >= 13:
+                print(f"检测到可能是时间戳形式的ID: {chat_id_input}")
+                # 查询数据库获取真实ID
+                session = Session()
+                try:
+                    # 查询最近的聊天，可能是用户刚刚创建的
+                    recent_chat = session.query(Chat).order_by(Chat.created_at.desc()).first()
+                    if recent_chat:
+                        print(f"使用最近创建的聊天ID: {recent_chat.id} 替代时间戳: {chat_id_input}")
+                        return recent_chat.id
+                except Exception as e:
+                    print(f"查询最近聊天时出错: {str(e)}")
+                finally:
+                    session.close()
+            return chat_id
+        # 否则保持原格式
+        return chat_id_input
+    except Exception as e:
+        print(f"标准化聊天ID时出错: {str(e)}")
+        # 出错时返回原始值
+        return chat_id_input
 
 if __name__ == '__main__':
     # 从环境变量获取配置参数

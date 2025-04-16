@@ -2,6 +2,8 @@ import os
 import logging
 from dotenv import load_dotenv
 from openai import OpenAI
+from sqlalchemy.orm import sessionmaker
+from models import engine, Chat, Message
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -21,6 +23,9 @@ client = OpenAI(
     base_url="https://api.deepseek.com/v1"
 )
 
+# 创建数据库会话
+Session = sessionmaker(bind=engine)
+
 # 系统角色设定
 SCENE_SIMULATION_PROMPT = """你是一位经验丰富的职场PUA角色扮演专家，擅长扮演职场中有心理操控（PUA）行为的职场人士。你的角色设定应该：
 1. 避免透露身份：请不要提及任何技术细节或涉及AI的相关信息，用户无需知道你是由系统生成的人工智能，你的角色是一个职场PUA大师。
@@ -36,6 +41,47 @@ SOLUTION_PROMPT = """你是一位经验丰富的职场反PUA的心理咨询专�
 4. 简洁、有条理，你的对话应该高度拟人化，用户提供的场景还原化，与真实对话方式一样。
 5. 每轮对话要保持多样性，不要出现重复的对话内容
 6. 请不要提及任何技术细节或涉及AI的相关信息，用户无需知道你是由系统生成的人工智能，你的角色是一个职场反PUA心理咨询专家。"""
+
+def get_chat_history(chat_id, max_messages=10):
+    """从数据库获取聊天历史记录
+    
+    Args:
+        chat_id: 聊天ID
+        max_messages: 最大获取消息数量，默认10条
+        
+    Returns:
+        消息列表，每条消息包含role和content
+    """
+    try:
+        if not chat_id:
+            logger.warning("未提供聊天ID，无法获取历史记录")
+            return []
+            
+        session = Session()
+        try:
+            # 查询聊天记录
+            messages = session.query(Message).filter(
+                Message.chat_id == chat_id
+            ).order_by(Message.created_at).all()
+            
+            # 格式化消息
+            formatted_messages = []
+            for msg in messages[-max_messages:]:  # 只获取最近的max_messages条消息
+                formatted_messages.append({
+                    "role": msg.role,
+                    "content": msg.content
+                })
+                
+            logger.info(f"获取到{len(formatted_messages)}条历史消息，聊天ID: {chat_id}")
+            return formatted_messages
+        except Exception as e:
+            logger.error(f"获取聊天历史失败: {str(e)}")
+            return []
+        finally:
+            session.close()
+    except Exception as e:
+        logger.error(f"获取聊天历史时发生异常: {str(e)}")
+        return []
 
 def build_prompt(data):
     """构建完整的提示词，生成针对性的、具有共情和专业性的应对方案"""
@@ -128,8 +174,7 @@ def generate_pua_response(chat_data):
         print(f"模式: {chat_data.get('mode')}")  # 明确打印模式值
         
         # 获取对话模式，确保使用用户传入的模式
-        # 之前设置了默认值为'simulation'，这可能导致用户选择的'solution'被覆盖
-        # 修改为只在模式不存在时才使用默认值
+        # 修改为只在模式不存在或无效时才使用默认值
         mode = chat_data.get('mode')
         if mode not in ['simulation', 'solution']:
             # 只有在模式无效或不存在时才使用默认值
@@ -144,16 +189,23 @@ def generate_pua_response(chat_data):
             message = chat_data.get('message', '')
             chat_id = chat_data.get('chatId')
             
+            # 无论之前用户选择什么，强制使用传入的模式，确保模式一致性
+            print(f"后续对话使用模式: {mode}")
+            
+            # 获取历史对话记录作为上下文
+            history = get_chat_history(chat_id)
+            print(f"获取到{len(history)}条历史消息")
+            
             # 明确检查mode是否为solution
             if mode == 'solution':
                 # 解决方案模式，提供专业建议
                 print("使用解决方案模式生成回复")
-                advice = generate_solution_advice(message)
+                advice = generate_solution_advice_with_context(message, history)
                 print(f"生成解决方案回复: {advice[:100]}...")  # 只打印前100个字符
             else:
                 # 默认模拟PUA对话模式
                 print("使用模拟PUA对话模式生成回复")
-                advice = generate_simulation_response(message)
+                advice = generate_simulation_response_with_context(message, history)
                 print(f"生成模拟PUA回复: {advice[:100]}...")  # 只打印前100个字符
                 
             return {
@@ -197,9 +249,66 @@ def save_conversation(user_id, data, response):
     # TODO: 实现对话记录的保存功能
     pass 
 
-def generate_simulation_response(message):
-    """生成模拟PUA对话回复"""
+def generate_simulation_response_with_context(message, history):
+    """生成带上下文的模拟PUA对话回复"""
     try:
+        # 构建带有历史上下文的消息列表
+        messages = [{"role": "system", "content": SCENE_SIMULATION_PROMPT}]
+        
+        # 添加历史对话
+        for msg in history:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        
+        # 添加用户当前消息
+        messages.append({"role": "user", "content": message})
+        
+        print(f"发送给模型的消息数: {len(messages)}")
+        
+        # 调用 DeepSeek API
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=messages,
+            temperature=0.7,
+            max_tokens=1000
+        )
+        
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"生成模拟回复失败: {str(e)}")
+        return f"生成回复时发生错误：{str(e)}"
+
+def generate_solution_advice_with_context(message, history):
+    """生成带上下文的解决方案建议回复"""
+    try:
+        # 构建带有历史上下文的消息列表
+        messages = [{"role": "system", "content": SOLUTION_PROMPT}]
+        
+        # 添加历史对话
+        for msg in history:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        
+        # 添加用户当前消息
+        messages.append({"role": "user", "content": message})
+        
+        print(f"发送给模型的消息数: {len(messages)}")
+        
+        # 调用 DeepSeek API
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=messages,
+            temperature=0.7,
+            max_tokens=1000
+        )
+        
+        return response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"生成解决方案失败: {str(e)}")
+        return f"生成解决方案时发生错误：{str(e)}"
+
+def generate_simulation_response(message):
+    """生成模拟PUA对话回复（不带上下文，保留用于兼容）"""
+    try:
+        logger.warning("使用不带上下文的函数生成回复，建议使用generate_simulation_response_with_context")
         # 构建提示词
         prompt = f"""{SCENE_SIMULATION_PROMPT}
         
@@ -224,8 +333,9 @@ def generate_simulation_response(message):
         return f"生成回复时发生错误：{str(e)}"
 
 def generate_solution_advice(message):
-    """生成解决方案建议回复"""
+    """生成解决方案建议回复（不带上下文，保留用于兼容）"""
     try:
+        logger.warning("使用不带上下文的函数生成回复，建议使用generate_solution_advice_with_context")
         # 构建提示词
         prompt = f"""{SOLUTION_PROMPT}
 
