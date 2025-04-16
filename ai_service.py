@@ -40,10 +40,22 @@ SOLUTION_PROMPT = """你是一位经验丰富的职场反PUA的心理咨询专�
 def build_prompt(data):
     """构建完整的提示词，生成针对性的、具有共情和专业性的应对方案"""
     try:
+        print(f"构建提示词，接收数据: {data}")
+        print(f"数据模式: {data.get('mode')}")
+        
+        # 检查模式是否有效，避免使用无效默认值
+        mode = data.get('mode')
+        if mode not in ['simulation', 'solution']:
+            # 只有在模式无效或不存在时才使用默认值
+            mode = 'simulation'
+            print(f"提示词使用默认模式: {mode}")
+        else:
+            print(f"提示词使用用户选择的模式: {mode}")
+        
         # 检查是否是后续对话
         if 'message' in data and 'type' in data and data['type'] == 'follow_up':
             # 构建后续对话的提示词
-            if data.get('mode') == 'simulation':
+            if mode == 'simulation':
                 return f"""{SCENE_SIMULATION_PROMPT}
             
 用户说：{data['message']}
@@ -115,9 +127,16 @@ def generate_pua_response(chat_data):
         print("生成PUA回复，输入数据:", chat_data)  # 添加日志
         print(f"模式: {chat_data.get('mode')}")  # 明确打印模式值
         
-        # 获取对话模式，确保有默认值
-        mode = chat_data.get('mode', 'simulation')
-        print(f"使用的模式: {mode}")  # 明确记录使用的模式
+        # 获取对话模式，确保使用用户传入的模式
+        # 之前设置了默认值为'simulation'，这可能导致用户选择的'solution'被覆盖
+        # 修改为只在模式不存在时才使用默认值
+        mode = chat_data.get('mode')
+        if mode not in ['simulation', 'solution']:
+            # 只有在模式无效或不存在时才使用默认值
+            mode = 'simulation'
+            print(f"使用默认模式: {mode}")
+        else:
+            print(f"使用用户选择的模式: {mode}")
         
         # 检查对话类型
         if chat_data.get('type') == 'follow_up':
@@ -212,7 +231,7 @@ def generate_solution_advice(message):
 
 用户说：{message}
 
-请提供高针对性的回复话术，和通俗易懂的大白话来理解用户的感受。"""
+请直接以对话形式回复用户，不要输出任何表示语气、停顿或其他指导的括号内容，例如'(停顿一下)'、'(用温和的语气)'等。这些都应该融入到您的回复语气和措辞中，而不是单独输出。"""
 
         # 调用 DeepSeek API
         response = client.chat.completions.create(
@@ -280,7 +299,8 @@ def generate_initial_solution(pua_type, severity, perpetrator, description):
 - 施害者身份：{perpetrators}
 - 详细描述：{description}
 
-作为职场反PUA心理咨询专家，请用温暖贴心的语言深度共情用户的处境，提供具体的应对话术和行动指南，严格围绕职场PUA场景进行心理疏导，对无关话题会温柔提醒，并通过自然生动的对话方式，让用户感受到真实的情感共鸣和实用支持。"""
+作为职场反PUA心理咨询专家，请用温暖贴心的语言深度共情用户的处境，提供具体的应对话术和行动指南，严格围绕职场PUA场景进行心理疏导，对无关话题会温柔提醒，并通过自然生动的对话方式，让用户感受到真实的情感共鸣和实用支持。
+请直接以对话形式回复用户，不要输出任何表示语气、停顿或其他指导的括号内容，例如'(停顿一下)'、'(用温和的语气)'等。这些都应该融入到您的回复语气和措辞中，而不是单独输出。"""
 
         # 调用 DeepSeek API
         response = client.chat.completions.create(

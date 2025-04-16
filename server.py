@@ -250,9 +250,21 @@ class AuthHandler(BaseHTTPRequestHandler):
                         self.wfile.write(json.dumps(response).encode('utf-8'))
                         return
                     
+                    # 记录用户选择的确定模式
+                    selected_mode = data['mode']
+                    logger.info(f"后续对话使用模式: {selected_mode}")
+                    
+                    # 构建对话数据，确保mode参数正确传递
+                    chat_data = {
+                        'type': 'follow_up',
+                        'message': data.get('message', ''),
+                        'chatId': data.get('chatId'),
+                        'mode': selected_mode  # 使用用户选择的明确模式
+                    }
+                    
                     # 生成回复
-                    ai_response = generate_pua_response(data)
-                    print("AI响应:", ai_response)  # 添加日志
+                    ai_response = generate_pua_response(chat_data)
+                    logger.info(f"AI响应: {ai_response}")  # 添加日志
                     
                     # 如果生成成功，保存消息记录
                     if ai_response['status'] == 'success':
@@ -292,7 +304,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                             response = {
                                 "status": "success",
                                 "advice": ai_response['advice'],
-                                "mode": data['mode']  # 将选择的模式返回给前端
+                                "mode": selected_mode  # 将用户选择的模式返回给前端
                             }
                         except Exception as e:
                             session.rollback()
@@ -302,6 +314,9 @@ class AuthHandler(BaseHTTPRequestHandler):
                             session.close()
                     else:
                         print("AI生成失败:", ai_response)  # 添加错误日志
+                        # 确保错误响应也包含正确的模式
+                        if 'mode' not in ai_response:
+                            ai_response['mode'] = selected_mode
                         response = ai_response
                 except jwt.ExpiredSignatureError:
                     response = {"status": "error", "message": "登录已过期"}
@@ -331,15 +346,29 @@ class AuthHandler(BaseHTTPRequestHandler):
                         self.wfile.write(json.dumps(response).encode('utf-8'))
                         return
                     
+                    # 记录用户选择的确定模式
+                    selected_mode = data['mode']
+                    logger.info(f"新建咨询使用模式: {selected_mode}")
+                    
+                    # 构建咨询数据，确保mode参数正确传递
+                    chat_data = {
+                        'type': 'initial',
+                        'puaType': data.get('puaType', []),
+                        'severity': data.get('severity', ''),
+                        'perpetrator': data.get('perpetrator', []),
+                        'description': data.get('description', ''),
+                        'mode': selected_mode
+                    }
+                    
                     # 生成回复
-                    ai_response = generate_pua_response(data)
+                    ai_response = generate_pua_response(chat_data)
                     
                     # 如果生成成功，保存对话记录
                     if ai_response['status'] == 'success':
                         session = Session()
                         try:
                             # 创建新的聊天，将mode保存到标题中以便前端显示
-                            mode_text = "场景模拟" if data['mode'] == 'simulation' else "解决方案"
+                            mode_text = "场景模拟" if selected_mode == 'simulation' else "解决方案"
                             title_prefix = f"[{mode_text}] "
                             chat = Chat(
                                 user_id=user_id,
@@ -372,7 +401,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                             response = {
                                 "status": "success",
                                 "advice": ai_response['advice'],
-                                "mode": data['mode'],  # 返回选择的模式给前端
+                                "mode": selected_mode,  # 返回用户选择的模式给前端
                                 "chatId": chat.id  # 添加chatId返回给前端
                             }
                             
@@ -382,6 +411,9 @@ class AuthHandler(BaseHTTPRequestHandler):
                         finally:
                             session.close()
                     else:
+                        # 确保错误响应也包含正确的模式
+                        if 'mode' not in ai_response:
+                            ai_response['mode'] = selected_mode
                         response = ai_response
                         
                 except jwt.ExpiredSignatureError:
@@ -763,6 +795,10 @@ class AuthHandler(BaseHTTPRequestHandler):
             if data['mode'] not in ['simulation', 'solution']:
                 return {"status": "error", "message": "mode参数值无效，只能是'simulation'(场景模拟)或'solution'(解决方案)"}
 
+            # 记录用户最终选择的模式，确保它被正确传递
+            selected_mode = data['mode']
+            print(f"用户选择的模式: {selected_mode}")
+
             # 检查是否是后续对话（有 chatId 和 message）
             if 'chatId' in data and 'message' in data:
                 # 构建后续对话的数据格式
@@ -770,7 +806,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                     'type': 'follow_up',
                     'message': data['message'],
                     'chatId': data['chatId'],
-                    'mode': data['mode']  # 使用传入的明确模式
+                    'mode': selected_mode  # 使用用户选择的明确模式
                 }
                 print(f"构建的chat_data: {chat_data}")  # 打印构建的数据
                 print(f"后续对话的模式: {chat_data['mode']}")  # 添加明确的模式日志
@@ -786,7 +822,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                     'severity': data['severity'],
                     'perpetrator': data['perpetrator'],
                     'description': data['description'],
-                    'mode': data['mode']  # 使用传入的明确模式
+                    'mode': selected_mode  # 使用用户选择的明确模式
                 }
                 print(f"构建的chat_data: {chat_data}")  # 打印构建的数据
                 print(f"初始对话的模式: {chat_data['mode']}")  # 添加明确的模式日志
@@ -798,7 +834,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                 return response
                 
             # 确保响应包含正确的模式
-            response['mode'] = data['mode']
+            response['mode'] = selected_mode
                 
             return response
             
