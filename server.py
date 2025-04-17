@@ -15,6 +15,7 @@ import threading
 import time
 from cleanup_chats import cleanup_old_chats
 import logging
+from urllib.parse import urlparse, parse_qs
 
 # 设置日志配置
 logging.basicConfig(
@@ -53,17 +54,73 @@ class AuthHandler(BaseHTTPRequestHandler):
         # 如果请求的Origin在允许列表中，则设置对应的CORS头
         if origin in allowed_origins:
             self.send_header('Access-Control-Allow-Origin', origin)
-            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE')
             self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
             self.send_header('Access-Control-Max-Age', '86400')
         
         self.end_headers()
+
+    def _serve_static_file(self, file_path, content_type='text/html'):
+        """专门处理静态文件的函数"""
+        try:
+            with open(file_path, 'rb') as file:
+                content = file.read()
+                
+            # 设置HTTP响应头
+            self.send_response(200)
+            self.send_header('Content-Type', f'{content_type}; charset=utf-8')
+            self.send_header('Content-Length', str(len(content)))
+            
+            # 添加标准缓存控制头
+            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            self.send_header('Pragma', 'no-cache')
+            self.send_header('Expires', '0')
+            
+            # 添加安全相关头
+            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.send_header('X-Frame-Options', 'DENY')
+            self.send_header('X-XSS-Protection', '1; mode=block')
+            
+            # 添加CORS头
+            origin = self.headers.get('Origin', '*')
+            allowed_origins = get_allowed_origins()
+            if origin in allowed_origins or origin == '*':
+                self.send_header('Access-Control-Allow-Origin', origin)
+                self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+            
+            # 完成头部设置
+            self.end_headers()
+            
+            # 发送文件内容
+            self.wfile.write(content)
+            print(f"成功发送静态文件: {file_path}, 内容类型: {content_type}, 大小: {len(content)}字节")
+            return True
+        except FileNotFoundError:
+            print(f"文件未找到: {file_path}")
+            return False
+        except Exception as e:
+            print(f"处理静态文件时出错: {str(e)}")
+            return False
 
     def do_OPTIONS(self):
         self._set_response_headers()
         self.wfile.write(b'')
 
     def do_GET(self):
+        # 处理静态HTML页面
+        if self.path == '/admin':
+            admin_html_path = 'templates/admin.html'
+            if self._serve_static_file(admin_html_path):
+                return
+            else:
+                # 文件不存在，返回错误信息
+                self._set_response_headers()
+                response = {"status": "error", "message": "管理页面不存在"}
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+                return
+        
+        # 其他API路径使用通用头
         self._set_response_headers()
         
         print(f"接收到GET请求: {self.path}")
@@ -80,9 +137,49 @@ class AuthHandler(BaseHTTPRequestHandler):
             # 验证 token
             payload = jwt.decode(token, os.getenv('JWT_SECRET', 'your-secret-key'), algorithms=['HS256'])
             user_id = payload['user_id']
+            is_admin = payload.get('is_admin', False)
             
+            # 检查是否是管理员API请求
+            if self.path.startswith('/admin/'):
+                # 验证管理员权限
+                if not is_admin:
+                    response = {"status": "error", "message": "需要管理员权限"}
+                    self.wfile.write(json.dumps(response).encode('utf-8'))
+                    return
+                
+                # 处理带查询参数的chat_details请求
+                if self.path.startswith('/admin/chat_details?'):
+                    parsed_url = urlparse(self.path)
+                    query_params = parse_qs(parsed_url.query)
+                    chat_id = query_params.get('chat_id', [''])[0]
+                    if chat_id:
+                        response = self.handle_admin_chat_details(chat_id)
+                    else:
+                        response = {"status": "error", "message": "缺少聊天ID参数"}
+                # 处理删除聊天记录请求
+                elif self.path.startswith('/admin/delete_chat?'):
+                    parsed_url = urlparse(self.path)
+                    query_params = parse_qs(parsed_url.query)
+                    chat_id = query_params.get('chat_id', [''])[0]
+                    if chat_id:
+                        response = self.handle_admin_delete_chat(chat_id)
+                    else:
+                        response = {"status": "error", "message": "缺少聊天ID参数"}
+                # 管理员API路由
+                elif self.path == '/admin/users':
+                    response = self.handle_admin_users()
+                elif self.path == '/admin/chats':
+                    response = self.handle_admin_chats()
+                elif self.path == '/admin/stats':
+                    response = self.handle_admin_stats()
+                elif self.path.startswith('/admin/chat_details/'):
+                    # 从路径中提取聊天ID
+                    chat_id = self.path.split('/')[-1]
+                    response = self.handle_admin_chat_details(chat_id)
+                else:
+                    response = {"status": "error", "message": "无效的管理员API路径"}
             # 检查是否是获取用户信息的请求
-            if self.path == '/user/info':
+            elif self.path == '/user/info':
                 response = self.handle_get_user_info(user_id)
             # 检查是否是获取所有聊天历史的请求
             elif self.path == '/chat/history':
@@ -132,6 +229,26 @@ class AuthHandler(BaseHTTPRequestHandler):
                     payload = jwt.decode(token, os.getenv('JWT_SECRET', 'your-secret-key'), algorithms=['HS256'])
                     user_id = payload['user_id']
                     response = self.handle_change_password(data, user_id)
+                except jwt.ExpiredSignatureError:
+                    response = {"status": "error", "message": "登录已过期"}
+                except jwt.InvalidTokenError:
+                    response = {"status": "error", "message": "无效的认证信息"}
+        elif self.path == '/admin/clear_all_chats':
+            # 验证管理员token
+            auth_header = self.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                response = {"status": "error", "message": "未授权访问"}
+            else:
+                token = auth_header.split(' ')[1]
+                try:
+                    # 验证token
+                    payload = jwt.decode(token, os.getenv('JWT_SECRET', 'your-secret-key'), algorithms=['HS256'])
+                    is_admin = payload.get('is_admin', False)
+                    
+                    if not is_admin:
+                        response = {"status": "error", "message": "需要管理员权限"}
+                    else:
+                        response = self.handle_admin_clear_all_chats()
                 except jwt.ExpiredSignatureError:
                     response = {"status": "error", "message": "登录已过期"}
                 except jwt.InvalidTokenError:
@@ -508,6 +625,56 @@ class AuthHandler(BaseHTTPRequestHandler):
         
         self.wfile.write(json.dumps(response).encode('utf-8'))
 
+    def do_DELETE(self):
+        """处理DELETE请求"""
+        self._set_response_headers()
+        
+        # 验证token
+        auth_header = self.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            response = {"status": "error", "message": "未授权访问"}
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+            return
+        
+        token = auth_header.split(' ')[1]
+        try:
+            # 验证token
+            payload = jwt.decode(token, os.getenv('JWT_SECRET', 'your-secret-key'), algorithms=['HS256'])
+            is_admin = payload.get('is_admin', False)
+            
+            # 验证管理员权限
+            if not is_admin:
+                response = {"status": "error", "message": "需要管理员权限"}
+                self.wfile.write(json.dumps(response).encode('utf-8'))
+                return
+            
+            # 处理删除单个聊天记录的请求
+            if self.path.startswith('/admin/delete_chat?'):
+                parsed_url = urlparse(self.path)
+                query_params = parse_qs(parsed_url.query)
+                chat_id = query_params.get('chat_id', [''])[0]
+                
+                if chat_id:
+                    response = self.handle_admin_delete_chat(chat_id)
+                else:
+                    response = {"status": "error", "message": "缺少聊天ID参数"}
+            
+            # 处理清除所有聊天记录的请求
+            elif self.path == '/admin/clear_all_chats':
+                response = self.handle_admin_clear_all_chats()
+            
+            else:
+                response = {"status": "error", "message": "无效的API路径"}
+            
+        except jwt.ExpiredSignatureError:
+            response = {"status": "error", "message": "登录已过期"}
+        except jwt.InvalidTokenError:
+            response = {"status": "error", "message": "无效的认证信息"}
+        except Exception as e:
+            response = {"status": "error", "message": str(e)}
+        
+        self.wfile.write(json.dumps(response).encode('utf-8'))
+
     def handle_get_chat_history(self, user_id, chat_id):
         session = Session()
         try:
@@ -741,10 +908,20 @@ class AuthHandler(BaseHTTPRequestHandler):
             if not user.check_password(password):
                 return {"status": "error", "message": "密码错误"}
             
+            # 检查用户是否是管理员（如果没有is_admin字段，默认为False）
+            is_admin = getattr(user, 'is_admin', False)
+            
+            # 记录登录IP和时间
+            client_ip = self.client_address[0]
+            user.last_login_ip = client_ip
+            user.last_login_time = datetime.now(UTC)
+            session.commit()
+            
             token = jwt.encode(
                 {
                     'user_id': user.id,
-                    'exp': datetime.now(UTC) + timedelta(days=1)
+                    'exp': datetime.now(UTC) + timedelta(days=1),
+                    'is_admin': is_admin  # 添加管理员标识到JWT中
                 },
                 os.getenv('JWT_SECRET', 'your-secret-key'),
                 algorithm='HS256'
@@ -972,6 +1149,243 @@ class AuthHandler(BaseHTTPRequestHandler):
             import traceback
             traceback.print_exc()  # 打印完整的错误栈
             return {"status": "error", "message": str(e)}
+
+    def handle_admin_users(self):
+        """获取所有用户列表，仅管理员可用"""
+        session = Session()
+        try:
+            users = session.query(User).all()
+            user_list = [{
+                'id': user.id,
+                'email': user.email,
+                'phone': user.phone,
+                'is_verified': user.is_verified,
+                'created_at': user.created_at.isoformat() if user.created_at else None,
+                'is_admin': getattr(user, 'is_admin', False),
+                'last_login_ip': getattr(user, 'last_login_ip', '未知'),
+                'last_login_time': user.last_login_time.isoformat() if getattr(user, 'last_login_time', None) else '未知'
+            } for user in users]
+            
+            # 添加一些统计信息
+            stats = {
+                'total': len(users),
+                'verified': sum(1 for user in users if user.is_verified),
+                'admins': sum(1 for user in users if getattr(user, 'is_admin', False))
+            }
+            
+            return {"status": "success", "users": user_list, "stats": stats}
+        except Exception as e:
+            logger.error(f"获取用户列表失败: {str(e)}")
+            return {"status": "error", "message": str(e)}
+        finally:
+            session.close()
+
+    def handle_admin_chats(self):
+        """获取所有聊天记录，仅管理员可用"""
+        session = Session()
+        try:
+            chats = session.query(Chat).all()
+            chat_list = [{
+                'id': chat.id,
+                'user_id': chat.user_id,
+                'title': chat.title,
+                'created_at': chat.created_at.isoformat() if chat.created_at else None,
+                'last_activity': chat.last_activity.isoformat() if chat.last_activity else None,
+                'message_count': len(chat.messages)
+            } for chat in chats]
+            
+            # 添加一些统计信息
+            now = datetime.now(UTC)
+            stats = {
+                'total_chats': len(chats),
+                'total_messages': sum(len(chat.messages) for chat in chats),
+                'active_today': sum(1 for chat in chats if chat.last_activity and 
+                                  chat.last_activity.tzinfo and 
+                                  (now - chat.last_activity).days < 1)
+            }
+            
+            return {"status": "success", "chats": chat_list, "stats": stats}
+        except Exception as e:
+            logger.error(f"获取聊天列表失败: {str(e)}")
+            return {"status": "error", "message": str(e)}
+        finally:
+            session.close()
+            
+    def handle_admin_stats(self):
+        """获取系统统计信息，仅管理员可用"""
+        session = Session()
+        try:
+            # 用户统计
+            total_users = session.query(User).count()
+            verified_users = session.query(User).filter(User.is_verified == True).count()
+            
+            # 聊天统计
+            total_chats = session.query(Chat).count()
+            total_messages = session.query(Message).count()
+            
+            # 今日活跃统计
+            today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            # 使用更安全的方法计算活跃用户
+            active_users_today = 0
+            new_chats_today = 0
+            new_messages_today = 0
+            
+            try:
+                # 获取今日活跃用户数
+                active_chats = session.query(Chat).all()
+                active_users_set = set()
+                for chat in active_chats:
+                    if chat.last_activity and chat.last_activity.tzinfo:
+                        time_diff = datetime.now(UTC) - chat.last_activity
+                        if time_diff.days < 1:
+                            active_users_set.add(chat.user_id)
+                active_users_today = len(active_users_set)
+                
+                # 获取今日新增聊天数
+                new_chats = session.query(Chat).all()
+                new_chats_today = sum(1 for chat in new_chats 
+                                    if chat.created_at and chat.created_at.tzinfo 
+                                    and chat.created_at >= today)
+                
+                # 获取今日新增消息数
+                new_messages = session.query(Message).all()
+                new_messages_today = sum(1 for msg in new_messages 
+                                       if msg.created_at and msg.created_at.tzinfo 
+                                       and msg.created_at >= today)
+                
+            except Exception as e:
+                logger.error(f"计算今日统计数据时出错: {str(e)}")
+                # 继续执行，返回已有的统计信息
+            
+            stats = {
+                "users": {
+                    "total": total_users,
+                    "verified": verified_users
+                },
+                "chats": {
+                    "total": total_chats,
+                    "total_messages": total_messages
+                },
+                "today": {
+                    "active_users": active_users_today,
+                    "new_chats": new_chats_today,
+                    "new_messages": new_messages_today
+                }
+            }
+            
+            return {"status": "success", "stats": stats}
+        except Exception as e:
+            logger.error(f"获取统计信息失败: {str(e)}")
+            return {"status": "error", "message": str(e)}
+        finally:
+            session.close()
+
+    def handle_admin_chat_details(self, chat_id):
+        """获取聊天详细内容，仅管理员可用"""
+        session = Session()
+        try:
+            # 获取聊天记录
+            chat = session.query(Chat).filter(Chat.id == chat_id).first()
+            
+            if not chat:
+                return {"status": "error", "message": "找不到该聊天记录"}
+            
+            # 获取用户信息
+            user = session.query(User).filter(User.id == chat.user_id).first()
+            user_info = {
+                'id': user.id,
+                'email': user.email,
+                'phone': user.phone if user.phone else '-',
+                'last_login_ip': user.last_login_ip or '未知',
+                'last_login_time': user.last_login_time.isoformat() if user.last_login_time else '未知',
+                'created_at': user.created_at.isoformat() if user.created_at else '未知'
+            } if user else {'id': '未知', 'email': '未知', 'phone': '未知', 'last_login_ip': '未知', 'last_login_time': '未知'}
+            
+            # 获取聊天信息
+            chat_info = {
+                'id': chat.id,
+                'title': chat.title,
+                'created_at': chat.created_at.isoformat() if chat.created_at else None,
+                'last_activity': chat.last_activity.isoformat() if chat.last_activity else None
+            }
+            
+            # 获取所有消息
+            messages = []
+            for message in chat.messages:
+                messages.append({
+                    'id': message.id,
+                    'role': message.role,
+                    'content': message.content,
+                    'form_data': message.form_data,
+                    'timestamp': message.created_at.isoformat() if message.created_at else None
+                })
+            
+            return {
+                "status": "success", 
+                "data": {
+                    "chat": chat_info,
+                    "user": user_info,
+                    "messages": messages
+                }
+            }
+        except Exception as e:
+            logger.error(f"获取聊天详情失败: {str(e)}")
+            return {"status": "error", "message": str(e)}
+        finally:
+            session.close()
+
+    def handle_admin_delete_chat(self, chat_id):
+        """删除指定的聊天记录，仅管理员可用"""
+        session = Session()
+        try:
+            # 获取聊天记录
+            chat = session.query(Chat).filter(Chat.id == chat_id).first()
+            
+            if not chat:
+                return {"status": "error", "message": "找不到该聊天记录"}
+            
+            # 删除相关的消息
+            session.query(Message).filter(Message.chat_id == chat_id).delete()
+            
+            # 删除聊天记录
+            session.delete(chat)
+            session.commit()
+            
+            return {"status": "success", "message": f"已成功删除聊天记录 (ID: {chat_id})"}
+        except Exception as e:
+            session.rollback()
+            logger.error(f"删除聊天记录失败: {str(e)}")
+            return {"status": "error", "message": str(e)}
+        finally:
+            session.close()
+
+    def handle_admin_clear_all_chats(self):
+        """清除所有聊天记录，仅管理员可用"""
+        session = Session()
+        try:
+            # 删除所有消息
+            message_count = session.query(Message).delete()
+            
+            # 删除所有聊天
+            chat_count = session.query(Chat).delete()
+            
+            session.commit()
+            
+            return {
+                "status": "success", 
+                "message": f"已成功清除所有聊天记录",
+                "data": {
+                    "chats_deleted": chat_count,
+                    "messages_deleted": message_count
+                }
+            }
+        except Exception as e:
+            session.rollback()
+            logger.error(f"清除所有聊天记录失败: {str(e)}")
+            return {"status": "error", "message": str(e)}
+        finally:
+            session.close()
 
 def verify_code(identifier, code):
     """验证短信验证码"""

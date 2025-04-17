@@ -20,6 +20,9 @@ class User(Base):
     password_hash = Column(String(128))
     is_verified = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    is_admin = Column(Boolean, default=False)  # 添加管理员标识字段
+    last_login_ip = Column(String(50), nullable=True)  # 添加最后登录IP
+    last_login_time = Column(DateTime(timezone=True), nullable=True)  # 最后登录时间
     
     # 添加与Chat的关系
     chats = relationship("Chat", back_populates="user")

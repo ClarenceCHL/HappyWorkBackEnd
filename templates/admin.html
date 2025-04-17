@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>后台管理系统</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* 基本样式 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            line-height: 1.5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* 头部样式 */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e8e8e8;
+        }
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1890ff;
+        }
+        
+        /* 标签页样式 */
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #e8e8e8;
+        }
+        .tab {
+            padding: 10px 16px;
+            margin-right: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-bottom: 2px solid transparent;
+        }
+        .tab:hover {
+            color: #1890ff;
+        }
+        .tab.active {
+            color: #1890ff;
+            border-bottom: 2px solid #1890ff;
+        }
+        
+        /* 卡片样式 */
+        .card {
+            background-color: #fff;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .card-title {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            color: #333;
+        }
+        
+        /* 统计卡片样式 */
+        .stats-container {
+            display: flex;
+            flex-wrap: wrap;
+            margin: 0 -10px;
+        }
+        .stat-card {
+            flex: 1 1 200px;
+            margin: 0 10px 20px;
+            background: #fff;
+            border-radius: 4px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        .stat-value {
+            font-size: 30px;
+            font-weight: 600;
+            color: #1890ff;
+            margin-bottom: 8px;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #999;
+        }
+        
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px 8px;
+            border-bottom: 1px solid #e8e8e8;
+        }
+        th {
+            font-weight: 500;
+            background-color: #fafafa;
+        }
+        tbody tr:hover {
+            background-color: #f5f5f5;
+        }
+        
+        /* 按钮样式 */
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background-color: #1890ff;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn:hover {
+            background-color: #40a9ff;
+        }
+        .btn-danger {
+            background-color: #ff4d4f;
+        }
+        .btn-danger:hover {
+            background-color: #ff7875;
+        }
+        
+        /* 登录表单样式 */
+        .login-form {
+            max-width: 360px;
+            margin: 100px auto;
+            padding: 30px;
+            background: #fff;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+        .form-title {
+            text-align: center;
+            margin-bottom: 24px;
+            font-size: 24px;
+            color: #1890ff;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+        }
+        .form-control {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            transition: all 0.3s;
+        }
+        .form-control:focus {
+            border-color: #40a9ff;
+            box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+            outline: none;
+        }
+        .form-footer {
+            margin-top: 24px;
+            text-align: center;
+        }
+        
+        /* 加载动画 */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100px;
+        }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #1890ff;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* 分页样式 */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        .page-item {
+            list-style: none;
+            margin: 0 5px;
+        }
+        .page-link {
+            display: block;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #d9d9d9;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .page-link:hover {
+            border-color: #1890ff;
+            color: #1890ff;
+        }
+        .page-item.active .page-link {
+            background-color: #1890ff;
+            border-color: #1890ff;
+            color: white;
+        }
+        
+        /* 查看聊天详情弹窗样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            border-radius: 4px;
+            width: 80%;
+            max-width: 1000px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e8e8e8;
+        }
+        
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        
+        .message-container {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .message-user {
+            background-color: #f1f1f1;
+            text-align: right;
+        }
+        
+        .message-assistant {
+            background-color: #e6f7ff;
+            text-align: left;
+        }
+        
+        .message-meta {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+        
+        .user-info {
+            display: flex;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #fafafa;
+            border-radius: 4px;
+        }
+        
+        .user-info-item {
+            margin-right: 20px;
+            margin-bottom: 5px;
+        }
+        
+        .user-info-label {
+            font-weight: bold;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 内容将由JavaScript动态生成 -->
+    </div>
+    
+    <!-- 添加模态框到文档 -->
+    <div id="chatDetailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>聊天详情</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div id="modalContent">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        /**
+         * 管理员后台控制台
+         */
+        class AdminConsole {
+            constructor() {
+                this.token = localStorage.getItem('token');
+                this.currentTab = 'dashboard';
+                this.app = document.getElementById('app');
+                this.userData = null;
+                this.chatData = null;
+                this.statsData = null;
+                
+                this.init();
+            }
+            
+            /**
+             * 初始化应用
+             */
+            init() {
+                // 检查是否有token
+                if (!this.token) {
+                    this.showLoginForm();
+                    return;
+                }
+                
+                // 尝试验证token
+                this.checkAdminAccess().then(isAdmin => {
+                    if (isAdmin) {
+                        this.renderApp();
+                        this.loadDashboard();
+                    } else {
+                        this.showLoginForm('您没有管理员权限或登录已过期，请重新登录');
+                    }
+                });
+            }
+            
+            /**
+             * 检查是否有管理员访问权限
+             */
+            async checkAdminAccess() {
+                try {
+                    const response = await fetch('/admin/users', {
+                        headers: {
+                            'Authorization': `Bearer ${this.token}`
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    return data.status === 'success';
+                } catch (error) {
+                    console.error('验证管理员权限时出错:', error);
+                    return false;
+                }
+            }
+            
+            /**
+             * 显示登录表单
+             */
+            showLoginForm(errorMsg = null) {
+                let html = `
+                    <div class="login-form">
+                        <h2 class="form-title">管理员登录</h2>
+                        ${errorMsg ? `<div style="color: #ff4d4f; margin-bottom: 16px; text-align: center;">${errorMsg}</div>` : ''}
+                        <div class="form-group">
+                            <label for="identifier">邮箱</label>
+                            <input type="text" class="form-control" id="identifier" placeholder="请输入邮箱">
+                        </div>
+                        <div class="form-group">
+                            <label for="password">密码</label>
+                            <input type="password" class="form-control" id="password" placeholder="请输入密码">
+                        </div>
+                        <div class="form-footer">
+                            <button class="btn" id="login-btn">登录</button>
+                        </div>
+                    </div>
+                `;
+                
+                this.app.innerHTML = html;
+                
+                // 绑定登录按钮事件
+                document.getElementById('login-btn').addEventListener('click', () => {
+                    this.handleLogin();
+                });
+                
+                // 绑定回车键登录
+                document.getElementById('password').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.handleLogin();
+                    }
+                });
+            }
+            
+            /**
+             * 处理登录请求
+             */
+            async handleLogin() {
+                const identifier = document.getElementById('identifier').value.trim();
+                const password = document.getElementById('password').value.trim();
+                
+                if (!identifier || !password) {
+                    alert('请输入邮箱和密码');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch('/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ identifier, password })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        this.token = data.token;
+                        localStorage.setItem('token', data.token);
+                        
+                        // 验证是否为管理员
+                        const isAdmin = await this.checkAdminAccess();
+                        if (isAdmin) {
+                            this.renderApp();
+                            this.loadDashboard();
+                        } else {
+                            this.showLoginForm('您的账号不是管理员，无法访问管理后台');
+                        }
+                    } else {
+                        this.showLoginForm(`登录失败: ${data.message}`);
+                    }
+                } catch (error) {
+                    console.error('登录请求出错:', error);
+                    this.showLoginForm('登录请求失败，请检查网络连接');
+                }
+            }
+            
+            /**
+             * 渲染应用主框架
+             */
+            renderApp() {
+                const html = `
+                    <div class="container">
+                        <div class="header">
+                            <h1>管理后台</h1>
+                            <button class="btn" id="logout-btn">退出登录</button>
+                        </div>
+                        
+                        <div class="tabs" id="tabs">
+                            <div class="tab active" data-tab="dashboard">概览</div>
+                            <div class="tab" data-tab="users">用户管理</div>
+                            <div class="tab" data-tab="chats">聊天记录</div>
+                        </div>
+                        
+                        <div id="content">
+                            <!-- 内容区域 -->
+                            <div class="loading">
+                                <div class="loading-spinner"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                this.app.innerHTML = html;
+                
+                // 绑定标签页切换事件
+                document.getElementById('tabs').addEventListener('click', (e) => {
+                    if (e.target.classList.contains('tab')) {
+                        const tab = e.target.getAttribute('data-tab');
+                        this.switchTab(tab);
+                    }
+                });
+                
+                // 绑定退出登录事件
+                document.getElementById('logout-btn').addEventListener('click', () => {
+                    localStorage.removeItem('token');
+                    this.token = null;
+                    this.showLoginForm();
+                });
+            }
+            
+            /**
+             * 切换标签页
+             */
+            switchTab(tab) {
+                if (this.currentTab === tab) return;
+                
+                this.currentTab = tab;
+                
+                // 更新标签页状态
+                const tabs = document.querySelectorAll('.tab');
+                tabs.forEach(t => {
+                    if (t.getAttribute('data-tab') === tab) {
+                        t.classList.add('active');
+                    } else {
+                        t.classList.remove('active');
+                    }
+                });
+                
+                // 显示加载中
+                document.getElementById('content').innerHTML = `
+                    <div class="loading">
+                        <div class="loading-spinner"></div>
+                    </div>
+                `;
+                
+                // 加载对应内容
+                if (tab === 'dashboard') {
+                    this.loadDashboard();
+                } else if (tab === 'users') {
+                    this.loadUsers();
+                } else if (tab === 'chats') {
+                    this.loadChats();
+                }
+            }
+            
+            /**
+             * 加载系统概览页
+             */
+            async loadDashboard() {
+                try {
+                    const response = await fetch('/admin/stats', {
+                        headers: {
+                            'Authorization': `Bearer ${this.token}`
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        this.statsData = data.stats;
+                        this.renderDashboard();
+                    } else {
+                        document.getElementById('content').innerHTML = `
+                            <div class="card">
+                                <p style="color: #ff4d4f;">加载统计信息失败: ${data.message}</p>
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    console.error('加载统计信息出错:', error);
+                    document.getElementById('content').innerHTML = `
+                        <div class="card">
+                            <p style="color: #ff4d4f;">加载统计信息请求失败，请检查网络连接</p>
+                        </div>
+                    `;
+                }
+            }
+            
+            /**
+             * 渲染系统概览页
+             */
+            renderDashboard() {
+                const stats = this.statsData;
+                
+                const html = `
+                    <div class="card">
+                        <h3 class="card-title">系统概览</h3>
+                        <div class="stats-container">
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.users.total}</div>
+                                <div class="stat-label">总用户数</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.users.verified}</div>
+                                <div class="stat-label">已验证用户</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.chats.total}</div>
+                                <div class="stat-label">总聊天次数</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.chats.total_messages}</div>
+                                <div class="stat-label">总消息数</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3 class="card-title">今日数据</h3>
+                        <div class="stats-container">
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.today.active_users}</div>
+                                <div class="stat-label">今日活跃用户</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.today.new_chats}</div>
+                                <div class="stat-label">今日新增聊天</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.today.new_messages}</div>
+                                <div class="stat-label">今日新增消息</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('content').innerHTML = html;
+            }
+            
+            /**
+             * 加载用户列表
+             */
+            async loadUsers() {
+                try {
+                    const response = await fetch('/admin/users', {
+                        headers: {
+                            'Authorization': `Bearer ${this.token}`
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        this.userData = data;
+                        this.renderUsers();
+                    } else {
+                        document.getElementById('content').innerHTML = `
+                            <div class="card">
+                                <p style="color: #ff4d4f;">加载用户列表失败: ${data.message}</p>
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    console.error('加载用户列表出错:', error);
+                    document.getElementById('content').innerHTML = `
+                        <div class="card">
+                            <p style="color: #ff4d4f;">加载用户列表请求失败，请检查网络连接</p>
+                        </div>
+                    `;
+                }
+            }
+            
+            /**
+             * 渲染用户列表
+             */
+            renderUsers() {
+                const users = this.userData.users;
+                const stats = this.userData.stats;
+                
+                let tableRows = '';
+                users.forEach(user => {
+                    const createdAt = new Date(user.created_at).toLocaleString('zh-CN');
+                    
+                    tableRows += `
+                        <tr>
+                            <td>${user.id}</td>
+                            <td>${user.email || '-'}</td>
+                            <td>${user.is_verified ? '是' : '否'}</td>
+                            <td>${user.is_admin ? '是' : '否'}</td>
+                            <td>${user.last_login_ip || '-'}</td>
+                            <td>${user.last_login_time ? new Date(user.last_login_time).toLocaleString('zh-CN') : '-'}</td>
+                            <td>${createdAt}</td>
+                        </tr>
+                    `;
+                });
+                
+                const html = `
+                    <div class="card">
+                        <h3 class="card-title">用户统计</h3>
+                        <div class="stats-container">
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.total}</div>
+                                <div class="stat-label">总用户数</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.verified}</div>
+                                <div class="stat-label">已验证用户</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.admins}</div>
+                                <div class="stat-label">管理员数量</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3 class="card-title">用户列表</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>邮箱</th>
+                                    <th>已验证</th>
+                                    <th>管理员</th>
+                                    <th>最后登录IP</th>
+                                    <th>最后登录时间</th>
+                                    <th>注册时间</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRows}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                
+                document.getElementById('content').innerHTML = html;
+            }
+            
+            /**
+             * 加载聊天记录
+             */
+            async loadChats() {
+                try {
+                    const response = await fetch('/admin/chats', {
+                        headers: {
+                            'Authorization': `Bearer ${this.token}`
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        this.chatData = data;
+                        this.renderChats();
+                    } else {
+                        document.getElementById('content').innerHTML = `
+                            <div class="card">
+                                <p style="color: #ff4d4f;">加载聊天记录失败: ${data.message}</p>
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    console.error('加载聊天记录出错:', error);
+                    document.getElementById('content').innerHTML = `
+                        <div class="card">
+                            <p style="color: #ff4d4f;">加载聊天记录请求失败，请检查网络连接</p>
+                        </div>
+                    `;
+                }
+            }
+            
+            /**
+             * 渲染聊天记录
+             */
+            renderChats() {
+                const chats = this.chatData.chats;
+                const stats = this.chatData.stats;
+                
+                // 按照最近活动时间排序
+                chats.sort((a, b) => {
+                    return new Date(b.last_activity) - new Date(a.last_activity);
+                });
+                
+                let tableRows = '';
+                chats.forEach(chat => {
+                    const createdAt = new Date(chat.created_at).toLocaleString('zh-CN');
+                    const lastActivity = new Date(chat.last_activity).toLocaleString('zh-CN');
+                    
+                    tableRows += `
+                        <tr>
+                            <td>${chat.id}</td>
+                            <td>${chat.user_id}</td>
+                            <td>${chat.title || '-'}</td>
+                            <td>${chat.message_count}</td>
+                            <td>${createdAt}</td>
+                            <td>${lastActivity}</td>
+                            <td>
+                                <button class="btn" onclick="adminConsole.viewChatDetails(${chat.id})">查看详情</button>
+                                <button class="btn btn-danger" onclick="adminConsole.deleteChatRecord(${chat.id})">删除</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                const html = `
+                    <div class="card">
+                        <h3 class="card-title">聊天统计</h3>
+                        <div class="stats-container">
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.total_chats}</div>
+                                <div class="stat-label">总聊天次数</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.total_messages}</div>
+                                <div class="stat-label">总消息数</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.active_today}</div>
+                                <div class="stat-label">今日活跃聊天</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <h3 class="card-title">聊天列表</h3>
+                            <button class="btn btn-danger" onclick="adminConsole.clearAllChats()">清除所有聊天记录</button>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>用户ID</th>
+                                    <th>标题</th>
+                                    <th>消息数</th>
+                                    <th>创建时间</th>
+                                    <th>最近活动</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRows}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+                
+                document.getElementById('content').innerHTML = html;
+            }
+            
+            /**
+             * 查看聊天详情
+             */
+            async viewChatDetails(chatId) {
+                const modal = document.getElementById('chatDetailModal');
+                const modalContent = document.getElementById('modalContent');
+                
+                // 显示模态框和加载动画
+                modal.style.display = 'block';
+                modalContent.innerHTML = `
+                    <div class="loading">
+                        <div class="loading-spinner"></div>
+                    </div>
+                `;
+                
+                // 绑定关闭按钮事件
+                const closeBtn = modal.querySelector('.close');
+                closeBtn.onclick = function() {
+                    modal.style.display = 'none';
+                };
+                
+                // 点击模态框外部关闭
+                window.onclick = function(event) {
+                    if (event.target === modal) {
+                        modal.style.display = 'none';
+                    }
+                };
+                
+                try {
+                    const response = await fetch(`/admin/chat_details?chat_id=${chatId}`, {
+                        headers: {
+                            'Authorization': `Bearer ${this.token}`
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        this.renderChatDetails(data.data);
+                    } else {
+                        modalContent.innerHTML = `
+                            <p style="color: #ff4d4f;">加载聊天详情失败: ${data.message}</p>
+                        `;
+                    }
+                } catch (error) {
+                    console.error('加载聊天详情出错:', error);
+                    modalContent.innerHTML = `
+                        <p style="color: #ff4d4f;">加载聊天详情请求失败，请检查网络连接</p>
+                    `;
+                }
+            }
+            
+            /**
+             * 渲染聊天详情
+             */
+            renderChatDetails(data) {
+                const chat = data.chat;
+                const user = data.user;
+                const messages = data.messages;
+                
+                // 格式化时间
+                const formatDate = (dateStr) => {
+                    return dateStr ? new Date(dateStr).toLocaleString('zh-CN') : '-';
+                };
+                
+                // 构建用户信息HTML
+                let userInfoHtml = `
+                    <div class="user-info">
+                        <div class="user-info-item">
+                            <div class="user-info-label">用户ID</div>
+                            <div>${user.id}</div>
+                        </div>
+                        <div class="user-info-item">
+                            <div class="user-info-label">邮箱</div>
+                            <div>${user.email}</div>
+                        </div>
+                        <div class="user-info-item">
+                            <div class="user-info-label">手机</div>
+                            <div>${user.phone}</div>
+                        </div>
+                        <div class="user-info-item">
+                            <div class="user-info-label">最后登录IP</div>
+                            <div>${user.last_login_ip}</div>
+                        </div>
+                        <div class="user-info-item">
+                            <div class="user-info-label">最后登录时间</div>
+                            <div>${formatDate(user.last_login_time)}</div>
+                        </div>
+                        <div class="user-info-item">
+                            <div class="user-info-label">注册时间</div>
+                            <div>${formatDate(user.created_at)}</div>
+                        </div>
+                    </div>
+                `;
+                
+                // 构建聊天信息HTML
+                let chatInfoHtml = `
+                    <div class="card">
+                        <h3 class="card-title">聊天信息</h3>
+                        <table>
+                            <tr>
+                                <th>ID</th>
+                                <td>${chat.id}</td>
+                            </tr>
+                            <tr>
+                                <th>标题</th>
+                                <td>${chat.title || '-'}</td>
+                            </tr>
+                            <tr>
+                                <th>创建时间</th>
+                                <td>${formatDate(chat.created_at)}</td>
+                            </tr>
+                            <tr>
+                                <th>最近活动</th>
+                                <td>${formatDate(chat.last_activity)}</td>
+                            </tr>
+                        </table>
+                    </div>
+                `;
+                
+                // 构建消息列表HTML
+                let messagesHtml = `<div class="card"><h3 class="card-title">消息内容</h3>`;
+                
+                messages.forEach(msg => {
+                    const messageClass = msg.role === 'user' ? 'message-user' : 'message-assistant';
+                    const timestamp = formatDate(msg.timestamp);
+                    
+                    messagesHtml += `
+                        <div class="message-container ${messageClass}">
+                            <div><strong>${msg.role === 'user' ? '用户' : 'AI助手'}</strong>: ${msg.content}</div>
+                            <div class="message-meta">时间: ${timestamp}</div>
+                        </div>
+                    `;
+                });
+                
+                messagesHtml += `</div>`;
+                
+                // 更新模态框内容
+                document.getElementById('modalContent').innerHTML = userInfoHtml + chatInfoHtml + messagesHtml;
+            }
+            
+            /**
+             * 删除聊天记录
+             */
+            async deleteChatRecord(chatId) {
+                try {
+                    const response = await fetch(`/admin/delete_chat?chat_id=${chatId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${this.token}`
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        this.loadChats();
+                    } else {
+                        alert(`删除聊天记录失败: ${data.message}`);
+                    }
+                } catch (error) {
+                    console.error('删除聊天记录出错:', error);
+                    alert('删除聊天记录请求失败，请检查网络连接');
+                }
+            }
+            
+            /**
+             * 清除所有聊天记录
+             */
+            async clearAllChats() {
+                try {
+                    const response = await fetch('/admin/clear_all_chats', {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${this.token}`
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        this.loadChats();
+                    } else {
+                        alert(`清除所有聊天记录失败: ${data.message}`);
+                    }
+                } catch (error) {
+                    console.error('清除所有聊天记录出错:', error);
+                    alert('清除所有聊天记录请求失败，请检查网络连接');
+                }
+            }
+        }
+        
+        // 当页面加载完成后初始化应用
+        let adminConsole;
+        document.addEventListener('DOMContentLoaded', () => {
+            adminConsole = new AdminConsole();
+        });
+    </script>
+</body>
+</html> 
