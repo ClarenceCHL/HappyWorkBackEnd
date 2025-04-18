@@ -37,7 +37,12 @@ Session = sessionmaker(bind=engine)
 def get_allowed_origins():
     """从环境变量获取允许的域名列表"""
     # 从环境变量获取允许的域名，多个域名用逗号分隔
-    allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:5173,https://main.d2xmmf7vqo14pz.amplifyapp.com')
+    allowed_origins = os.getenv('ALLOWED_ORIGINS')
+    if not allowed_origins:
+        # 如果环境变量未设置或为空，可以抛出错误或返回空列表
+        # 这里选择返回空列表，让后续的CORS检查处理
+        # 或者你可以选择抛出异常: raise ValueError("ALLOWED_ORIGINS environment variable is not set.")
+        return []
     # 分割并去除空白字符
     return [origin.strip() for origin in allowed_origins.split(',')]
 
