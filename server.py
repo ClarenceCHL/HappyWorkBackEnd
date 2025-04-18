@@ -253,6 +253,30 @@ class AuthHandler(BaseHTTPRequestHandler):
                     response = {"status": "error", "message": "登录已过期"}
                 except jwt.InvalidTokenError:
                     response = {"status": "error", "message": "无效的认证信息"}
+        elif self.path == '/admin/add_admin':
+            # 验证管理员token
+            auth_header = self.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                response = {"status": "error", "message": "未授权访问"}
+            else:
+                token = auth_header.split(' ')[1]
+                try:
+                    # 验证token
+                    payload = jwt.decode(token, os.getenv('JWT_SECRET', 'your-secret-key'), algorithms=['HS256'])
+                    is_admin = payload.get('is_admin', False)
+
+                    if not is_admin:
+                        response = {"status": "error", "message": "需要管理员权限"}
+                    else:
+                        # 调用新的处理函数
+                        response = self.handle_add_admin(data)
+                except jwt.ExpiredSignatureError:
+                    response = {"status": "error", "message": "登录已过期"}
+                except jwt.InvalidTokenError:
+                    response = {"status": "error", "message": "无效的认证信息"}
+                except Exception as e:
+                    logger.error(f"添加管理员时出错: {e}", exc_info=True)
+                    response = {"status": "error", "message": f"处理请求时发生内部错误: {e}"}
         elif self.path == '/api/activate-free-access':
             auth_header = self.headers.get('Authorization')
             if not auth_header or not auth_header.startswith('Bearer '):
@@ -674,6 +698,7 @@ class AuthHandler(BaseHTTPRequestHandler):
         try:
             # 验证token
             payload = jwt.decode(token, os.getenv('JWT_SECRET', 'your-secret-key'), algorithms=['HS256'])
+            requesting_admin_id = payload['user_id'] # 获取发起请求的管理员ID
             is_admin = payload.get('is_admin', False)
             
             # 验证管理员权限
@@ -682,10 +707,11 @@ class AuthHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps(response).encode('utf-8'))
                 return
             
+            parsed_url = urlparse(self.path)
+            query_params = parse_qs(parsed_url.query)
+            
             # 处理删除单个聊天记录的请求
             if self.path.startswith('/admin/delete_chat?'):
-                parsed_url = urlparse(self.path)
-                query_params = parse_qs(parsed_url.query)
                 chat_id = query_params.get('chat_id', [''])[0]
                 
                 if chat_id:
@@ -697,6 +723,18 @@ class AuthHandler(BaseHTTPRequestHandler):
             elif self.path == '/admin/clear_all_chats':
                 response = self.handle_admin_clear_all_chats()
             
+            # 新增：处理删除用户的请求
+            elif self.path.startswith('/admin/delete_user?'):
+                user_id_to_delete_str = query_params.get('user_id', [''])[0]
+                if user_id_to_delete_str:
+                    try:
+                        user_id_to_delete = int(user_id_to_delete_str)
+                        response = self.handle_admin_delete_user(requesting_admin_id, user_id_to_delete)
+                    except ValueError:
+                        response = {"status": "error", "message": "无效的用户ID格式"}
+                else:
+                    response = {"status": "error", "message": "缺少用户ID参数"}
+                    
             else:
                 response = {"status": "error", "message": "无效的API路径"}
             
@@ -939,8 +977,13 @@ class AuthHandler(BaseHTTPRequestHandler):
             
             user = session.query(User).filter(User.email == identifier).first()
             
-            if not user or not user.is_verified:
-                return {"status": "error", "message": "邮箱不存在或未验证"}
+            # 修改登录验证逻辑：先检查用户是否存在，然后对非管理员检查是否验证
+            if not user:
+                return {"status": "error", "message": "邮箱不存在"}
+            
+            # 只有非管理员用户才需要验证 is_verified 状态
+            if not user.is_admin and not user.is_verified:
+                return {"status": "error", "message": "邮箱未验证"}
             
             if not user.check_password(password):
                 return {"status": "error", "message": "密码错误"}
@@ -1373,27 +1416,28 @@ class AuthHandler(BaseHTTPRequestHandler):
             session.close()
 
     def handle_admin_delete_chat(self, chat_id):
-        """删除指定的聊天记录，仅管理员可用"""
         session = Session()
         try:
-            # 获取聊天记录
-            chat = session.query(Chat).filter(Chat.id == chat_id).first()
-            
-            if not chat:
-                return {"status": "error", "message": "找不到该聊天记录"}
-            
-            # 删除相关的消息
+            chat_id = int(chat_id)
+            # 先删除与该聊天相关的所有消息
             session.query(Message).filter(Message.chat_id == chat_id).delete()
-            
-            # 删除聊天记录
-            session.delete(chat)
-            session.commit()
-            
-            return {"status": "success", "message": f"已成功删除聊天记录 (ID: {chat_id})"}
+            # 然后删除聊天本身
+            chat = session.query(Chat).filter(Chat.id == chat_id).first()
+            if chat:
+                session.delete(chat)
+                session.commit()
+                logger.info(f"管理员删除了聊天记录: ID {chat_id}")
+                return {"status": "success", "message": f"聊天记录 {chat_id} 已删除"}
+            else:
+                logger.warning(f"尝试删除不存在的聊天记录: ID {chat_id}")
+                return {"status": "error", "message": "聊天记录未找到"}
+        except ValueError:
+            logger.error(f"无效的聊天ID格式: {chat_id}")
+            return {"status": "error", "message": "无效的聊天ID"}
         except Exception as e:
             session.rollback()
-            logger.error(f"删除聊天记录失败: {str(e)}")
-            return {"status": "error", "message": str(e)}
+            logger.error(f"删除聊天记录时出错 (ID: {chat_id}): {e}", exc_info=True)
+            return {"status": "error", "message": f"删除聊天记录时出错: {e}"}
         finally:
             session.close()
 
@@ -1421,6 +1465,99 @@ class AuthHandler(BaseHTTPRequestHandler):
             session.rollback()
             logger.error(f"清除所有聊天记录失败: {str(e)}")
             return {"status": "error", "message": str(e)}
+        finally:
+            session.close()
+
+    def handle_add_admin(self, data):
+        session = Session()
+        try:
+            email = data.get('email')
+            add_type = data.get('add_type') # 'existing' or 'new'
+            password = data.get('password')
+
+            if not email or not User.is_valid_email(email):
+                return {"status": "error", "message": "无效的邮箱地址"}
+            if not add_type or add_type not in ['existing', 'new']:
+                return {"status": "error", "message": "无效的操作类型"}
+
+            user = session.query(User).filter(User.email == email).first()
+
+            if add_type == 'existing':
+                if user:
+                    if user.is_admin:
+                        return {"status": "warning", "message": "该用户已经是管理员"}
+                    user.is_admin = True
+                    session.commit()
+                    logger.info(f"管理员添加了现有用户 {email} 为管理员")
+                    return {"status": "success", "message": f"用户 {email} 已被设为管理员"}
+                else:
+                    return {"status": "error", "message": "邮箱未注册，无法直接添加为管理员"}
+            
+            elif add_type == 'new':
+                if user:
+                    return {"status": "error", "message": "该邮箱已被注册"}
+                if not password or len(password) < 6: # 简单的密码长度检查
+                    return {"status": "error", "message": "新管理员必须设置至少6位密码"}
+                
+                new_admin = User(email=email, is_admin=True, is_verified=False) # 创建用户，设为管理员，但不设为已验证
+                new_admin.set_password(password) # 设置密码
+                session.add(new_admin)
+                session.commit()
+                logger.info(f"管理员创建了新的管理员账户: {email}")
+                return {"status": "success", "message": f"管理员账户 {email} 创建成功"}
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"添加管理员时出错: {e}", exc_info=True)
+            return {"status": "error", "message": f"处理请求时发生内部错误: {e}"}
+        finally:
+            session.close()
+
+    def handle_admin_delete_user(self, requesting_admin_id, user_id_to_delete):
+        session = Session()
+        try:
+            # 安全检查：禁止管理员删除自己的账户
+            if requesting_admin_id == user_id_to_delete:
+                logger.warning(f"管理员 (ID: {requesting_admin_id}) 尝试删除自己的账户")
+                return {"status": "error", "message": "不能删除自己的账户"}
+            
+            # 查找要删除的用户
+            user = session.query(User).filter(User.id == user_id_to_delete).first()
+            if not user:
+                logger.warning(f"管理员 (ID: {requesting_admin_id}) 尝试删除不存在的用户 (ID: {user_id_to_delete})")
+                return {"status": "error", "message": "用户不存在"}
+
+            logger.info(f"管理员 (ID: {requesting_admin_id}) 开始删除用户 (ID: {user_id_to_delete}, Email: {user.email})")
+
+            # 手动级联删除：先删除关联的 Message，再删除 Chat，最后删除 User
+            # 1. 查找该用户的所有 Chat ID
+            chat_ids = [chat.id for chat in user.chats]
+            
+            if chat_ids:
+                # 2. 删除这些 Chat 关联的所有 Message
+                logger.info(f"准备删除用户 {user_id_to_delete} 的 {len(chat_ids)} 个聊天的消息...")
+                session.query(Message).filter(Message.chat_id.in_(chat_ids)).delete(synchronize_session=False)
+                logger.info(f"已删除用户 {user_id_to_delete} 的消息")
+                
+                # 3. 删除这些 Chat
+                logger.info(f"准备删除用户 {user_id_to_delete} 的 {len(chat_ids)} 个聊天...")
+                session.query(Chat).filter(Chat.id.in_(chat_ids)).delete(synchronize_session=False)
+                logger.info(f"已删除用户 {user_id_to_delete} 的聊天")
+
+            # 4. 删除用户本身
+            logger.info(f"准备删除用户 {user_id_to_delete} 本身...")
+            session.delete(user)
+            
+            # 提交事务
+            session.commit()
+            logger.info(f"管理员 (ID: {requesting_admin_id}) 成功删除用户 (ID: {user_id_to_delete})")
+            
+            return {"status": "success", "message": f"用户 {user.email} (ID: {user_id_to_delete}) 已被成功删除"}
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"管理员 (ID: {requesting_admin_id}) 删除用户 (ID: {user_id_to_delete}) 时出错: {e}", exc_info=True)
+            return {"status": "error", "message": f"删除用户时发生内部错误: {e}"}
         finally:
             session.close()
 
