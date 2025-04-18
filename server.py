@@ -253,6 +253,40 @@ class AuthHandler(BaseHTTPRequestHandler):
                     response = {"status": "error", "message": "登录已过期"}
                 except jwt.InvalidTokenError:
                     response = {"status": "error", "message": "无效的认证信息"}
+        elif self.path == '/api/activate-free-access':
+            auth_header = self.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                response = {"status": "error", "message": "未授权访问"}
+            else:
+                token = auth_header.split(' ')[1]
+                try:
+                    payload = jwt.decode(token, os.getenv('JWT_SECRET', 'your-secret-key'), algorithms=['HS256'])
+                    user_id = payload['user_id']
+                    
+                    session = Session()
+                    try:
+                        user = session.query(User).filter(User.id == user_id).first()
+                        if user:
+                            user.is_paid = True
+                            session.commit()
+                            response = {"status": "success", "message": "免费访问已激活"}
+                            logger.info(f"用户 {user_id} 激活了免费访问")
+                        else:
+                            response = {"status": "error", "message": "用户不存在"}
+                    except Exception as e:
+                        session.rollback()
+                        logger.error(f"激活免费访问时数据库出错 (用户 {user_id}): {str(e)}")
+                        response = {"status": "error", "message": f"数据库错误: {str(e)}"}
+                    finally:
+                        session.close()
+
+                except jwt.ExpiredSignatureError:
+                    response = {"status": "error", "message": "登录已过期"}
+                except jwt.InvalidTokenError:
+                    response = {"status": "error", "message": "无效的认证信息"}
+                except Exception as e:
+                    logger.error(f"处理 /api/activate-free-access 时发生未知错误: {str(e)}")
+                    response = {"status": "error", "message": f"处理请求时出错: {str(e)}"}
         elif self.path == '/chat/message':  # 处理聊天消息
             # 验证 token
             auth_header = self.headers.get('Authorization')
@@ -715,9 +749,12 @@ class AuthHandler(BaseHTTPRequestHandler):
             if not user:
                 return {"status": "error", "message": "用户不存在"}
             
+            # 同时返回 email, is_paid 和 has_pdf 状态
             return {
                 "status": "success",
-                "email": user.email
+                "email": user.email,
+                "is_paid": user.is_paid, 
+                "has_pdf": user.has_pdf # 添加 has_pdf 字段
             }
             
         except Exception as e:

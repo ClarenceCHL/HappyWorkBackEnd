@@ -20,3 +20,19 @@
 2025-04-17 20:49:47,476 - INFO - 成功添加last_login_ip字段
 2025-04-17 20:49:47,476 - INFO - 添加last_login_time字段到users表
 2025-04-17 20:49:47,477 - INFO - 成功添加last_login_time字段
+2025-04-18 14:14:50,131 - INFO - === Starting migration: migrate_add_is_paid.py ===
+2025-04-18 14:14:50,132 - INFO - Connected to database.
+2025-04-18 14:14:50,133 - INFO - Adding column 'is_paid' to table 'users'...
+2025-04-18 14:14:50,134 - INFO - Column 'is_paid' added successfully.
+2025-04-18 14:14:50,134 - INFO - Changes committed.
+2025-04-18 14:14:50,134 - INFO - Database connection closed.
+2025-04-18 14:14:50,134 - INFO - === Finished migration: migrate_add_is_paid.py ===
+2025-04-18 15:11:04,959 - INFO - === Starting migration: migrate_add_pdf_fields.py ===
+2025-04-18 15:11:04,960 - INFO - Connected to database for PDF fields migration.
+2025-04-18 15:11:04,961 - INFO - Adding column 'has_pdf' to table 'users'...
+2025-04-18 15:11:04,962 - INFO - Column 'has_pdf' added successfully.
+2025-04-18 15:11:04,962 - INFO - Adding column 'pdf_storage_path' to table 'users'...
+2025-04-18 15:11:04,962 - INFO - Column 'pdf_storage_path' added successfully.
+2025-04-18 15:11:04,962 - INFO - Changes committed for columns: has_pdf, pdf_storage_path.
+2025-04-18 15:11:04,962 - INFO - Database connection closed after PDF fields migration.
+2025-04-18 15:11:04,962 - INFO - === Finished migration: migrate_add_pdf_fields.py ===

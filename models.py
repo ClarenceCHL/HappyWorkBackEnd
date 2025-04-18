@@ -23,6 +23,9 @@ class User(Base):
     is_admin = Column(Boolean, default=False)  # 添加管理员标识字段
     last_login_ip = Column(String(50), nullable=True)  # 添加最后登录IP
     last_login_time = Column(DateTime(timezone=True), nullable=True)  # 最后登录时间
+    is_paid = Column(Boolean, default=False, nullable=False) # 新增：用户是否已支付
+    has_pdf = Column(Boolean, default=False, nullable=False) # 新增：是否已生成PDF
+    pdf_storage_path = Column(String, nullable=True)        # 新增：PDF存储路径或标识符
     
     # 添加与Chat的关系
     chats = relationship("Chat", back_populates="user")
