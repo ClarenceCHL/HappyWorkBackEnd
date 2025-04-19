@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <title>人设战略破局职场PUA - 专属报告</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
     <!-- Markdown渲染 -->
@@ -481,6 +481,98 @@
             to { transform: rotate(360deg); }
         }
         
+        /* 移动端适配优化 */
+        @media (max-width: 768px) {
+            .report-container {
+                padding: 1.5rem 1rem;
+                margin-top: 3rem;
+            }
+            
+            .print-section {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: flex-start;
+            }
+            
+            .print-btn {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .markdown-content h1 {
+                font-size: 1.5rem;
+            }
+            
+            .markdown-content h2 {
+                font-size: 1.3rem;
+            }
+            
+            .markdown-content h3 {
+                font-size: 1.1rem;
+            }
+            
+            .markdown-content p, .markdown-content li {
+                font-size: 0.95rem;
+            }
+            
+            .content-box {
+                padding: 1.5rem 1rem;
+            }
+            
+            .report-footer {
+                margin: 1.5rem -1rem -1.5rem -1rem;
+                padding: 1rem;
+            }
+            
+            /* 增大移动端返回按钮的可点击区域 */
+            .back-btn {
+                top: 10px;
+                left: 10px;
+                padding: 0.6rem 1.2rem;
+                font-size: 1rem;
+            }
+            
+            .back-btn svg {
+                width: 18px;
+                height: 18px;
+            }
+            
+            /* 减小移动端装饰元素的尺寸 */
+            .shape-1 {
+                width: 150px;
+                height: 150px;
+            }
+            
+            .shape-2 {
+                width: 120px;
+                height: 120px;
+            }
+            
+            .shape-3 {
+                width: 100px;
+                height: 100px;
+            }
+        }
+        
+        /* 超小屏幕适配 */
+        @media (max-width: 375px) {
+            .report-container {
+                padding: 1rem 0.8rem;
+            }
+            
+            .content-box {
+                padding: 1rem 0.8rem;
+            }
+            
+            .markdown-content h1 {
+                font-size: 1.3rem;
+            }
+            
+            .markdown-content h2 {
+                font-size: 1.1rem;
+            }
+        }
+        
         @media print {
             body {
                 background-color: white;
@@ -667,6 +759,7 @@
                 const previewId = getPreviewId();
                 console.log(`开始获取报告，预览ID: ${previewId}`);
                 
+                // 使用相对路径，防止后端服务器URL暴露
                 const response = await fetch(`/preview/${previewId}`, {
                     headers: {
                         'Accept': 'application/json'
@@ -743,6 +836,17 @@
                      <p class="text-gray-500 text-sm mt-2">错误详情: ${error.message}</p>`;
             }
         }
+
+        // 防止显示后端服务器域名
+        document.addEventListener('DOMContentLoaded', function() {
+            // 隐藏地址栏中的URL
+            if(window.history && window.history.pushState) {
+                // 使用pushState操作历史记录，不实际刷新但改变URL显示
+                const currentPath = window.location.pathname;
+                const displayUrl = window.location.protocol + '//' + window.location.host + currentPath;
+                window.history.pushState(null, document.title, displayUrl);
+            }
+        });
 
         // 页面加载完成后获取报告
         window.addEventListener('DOMContentLoaded', fetchReport);
