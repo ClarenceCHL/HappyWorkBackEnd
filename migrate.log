@@ -36,3 +36,16 @@
 2025-04-18 15:11:04,962 - INFO - Changes committed for columns: has_pdf, pdf_storage_path.
 2025-04-18 15:11:04,962 - INFO - Database connection closed after PDF fields migration.
 2025-04-18 15:11:04,962 - INFO - === Finished migration: migrate_add_pdf_fields.py ===
+2025-04-19 13:45:57,380 - INFO - === Starting migration: migrate_add_pdf_fields.py ===
+2025-04-19 13:45:57,381 - INFO - Connected to database for PDF fields migration.
+2025-04-19 13:45:57,382 - INFO - Column 'has_pdf' already exists.
+2025-04-19 13:45:57,382 - INFO - Column 'pdf_storage_path' already exists.
+2025-04-19 13:45:57,382 - INFO - No new columns were added. No commit needed.
+2025-04-19 13:45:57,382 - INFO - Database connection closed after PDF fields migration.
+2025-04-19 13:45:57,382 - INFO - === Finished migration: migrate_add_pdf_fields.py ===
+2025-04-19 14:16:08,967 - INFO - 成功创建questionnaires表
+2025-04-19 14:16:08,968 - INFO - 成功创建questionnaire_responses表
+2025-04-19 14:16:08,968 - INFO - 迁移成功完成
+2025-04-19 14:24:50,857 - INFO - questionnaires表已存在，跳过创建
+2025-04-19 14:24:50,857 - INFO - questionnaire_responses表已存在，跳过创建
+2025-04-19 14:24:50,857 - INFO - 迁移成功完成

@@ -1,14 +1,14 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 from sqlalchemy.orm import sessionmaker
-from models import engine, User, VerificationCode, Chat, Message
+from models import engine, User, VerificationCode, Chat, Message, Questionnaire, QuestionnaireResponse
 import jwt
 from datetime import datetime, timedelta, UTC
 import smtplib
 from email.mime.text import MIMEText
 import os
 from dotenv import load_dotenv
-from ai_service import generate_pua_response
+from ai_service import generate_pua_response, generate_questionnaire_report, save_questionnaire, save_questionnaire_response
 from werkzeug.security import generate_password_hash
 import sqlite3
 import threading
@@ -124,6 +124,68 @@ class AuthHandler(BaseHTTPRequestHandler):
                 response = {"status": "error", "message": "管理页面不存在"}
                 self.wfile.write(json.dumps(response).encode('utf-8'))
                 return
+        # 处理预览报告
+        elif self.path.startswith('/preview/'):
+            # 打印完整的路径和路径部分，帮助调试
+            path_components = self.path.split('/')
+            preview_id = path_components[-1] if len(path_components) > 2 else ""
+            
+            print(f"处理预览请求，完整路径: {self.path}")
+            print(f"请求方法: {self.command}")
+            print(f"路径组件: {path_components}")
+            print(f"提取的预览ID: {preview_id}")
+            print(f"请求头: {dict(self.headers)}")
+            
+            # 检查是否为AJAX请求，如果是JSON请求则返回JSON数据
+            accept_header = self.headers.get('Accept', '')
+            print(f"预览请求Accept头: {accept_header}")
+            
+            if 'application/json' in accept_header:
+                print(f"处理为JSON请求: {self.path}, 预览ID: {preview_id}")
+                if not preview_id:
+                    print("错误: 预览ID为空")
+                    self._set_response_headers()
+                    response = {"status": "error", "message": "缺少预览ID"}
+                    self.wfile.write(json.dumps(response).encode('utf-8'))
+                    return
+                
+                try:
+                    print(f"调用handle_preview_report，预览ID: {preview_id}")
+                    response = self.handle_preview_report(preview_id)
+                    print(f"预览报告响应状态: {response.get('status')}")
+                    if response.get('status') == 'success':
+                        report_content = response.get('report', '')
+                        content_length = len(report_content) if report_content else 0
+                        sample = report_content[:100] + '...' if content_length > 100 else report_content
+                        print(f"报告内容长度: {content_length}")
+                        print(f"报告内容示例: {sample}")
+                    
+                    self._set_response_headers()
+                    response_json = json.dumps(response)
+                    self.wfile.write(response_json.encode('utf-8'))
+                    print(f"已发送JSON响应，长度: {len(response_json)}")
+                    return
+                except Exception as e:
+                    print(f"处理预览报告请求时出错: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    self._set_response_headers()
+                    response = {"status": "error", "message": f"服务器处理错误: {str(e)}"}
+                    self.wfile.write(json.dumps(response).encode('utf-8'))
+                    return
+            else:
+                # 如果是常规浏览器请求，返回HTML页面
+                print(f"处理为HTML页面请求: {self.path}")
+                preview_html_path = 'templates/preview_report.html'
+                if self._serve_static_file(preview_html_path, 'text/html'):
+                    print(f"成功发送HTML页面: {preview_html_path}")
+                    return
+                else:
+                    print(f"错误: HTML页面不存在: {preview_html_path}")
+                    self._set_response_headers()
+                    response = {"status": "error", "message": "预览页面不存在"}
+                    self.wfile.write(json.dumps(response).encode('utf-8'))
+                    return
         
         # 其他API路径使用通用头
         self._set_response_headers()
@@ -186,6 +248,9 @@ class AuthHandler(BaseHTTPRequestHandler):
             # 检查是否是获取用户信息的请求
             elif self.path == '/user/info':
                 response = self.handle_get_user_info(user_id)
+            # 检查是否是获取用户问卷列表的请求
+            elif self.path == '/user/questionnaires':
+                response = self.handle_get_user_questionnaires(user_id)
             # 检查是否是获取所有聊天历史的请求
             elif self.path == '/chat/history':
                 response = self.handle_get_all_chats(user_id)
@@ -204,8 +269,10 @@ class AuthHandler(BaseHTTPRequestHandler):
         except jwt.InvalidTokenError:
             response = {"status": "error", "message": "无效的认证信息"}
         except Exception as e:
+            print(f"处理请求时出错: {str(e)}")
             response = {"status": "error", "message": str(e)}
             
+        # 发送响应
         self.wfile.write(json.dumps(response).encode('utf-8'))
 
     def do_POST(self):
@@ -407,7 +474,35 @@ class AuthHandler(BaseHTTPRequestHandler):
                     response = {"status": "error", "message": "无效的认证信息"}
                 except Exception as e:
                     print(f"处理聊天消息时出错: {str(e)}")
-                    response = {"status": "error", "message": str(e)}
+        # 添加问卷提交路由
+        elif self.path == '/questionnaire/submit':
+            # 验证token
+            auth_header = self.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                response = {"status": "error", "message": "未授权访问"}
+            else:
+                token = auth_header.split(' ')[1]
+                try:
+                    # 验证token
+                    payload = jwt.decode(token, os.getenv('JWT_SECRET', 'your-secret-key'), algorithms=['HS256'])
+                    user_id = payload['user_id']
+                    
+                    print(f"收到问卷提交请求，用户ID: {user_id}")
+                    print(f"问卷数据: {data}")
+                    
+                    # 处理问卷提交
+                    response = self.handle_questionnaire_submit(user_id, data)
+                    print(f"问卷处理结果: {response}")
+                except jwt.ExpiredSignatureError:
+                    response = {"status": "error", "message": "登录已过期"}
+                except jwt.InvalidTokenError:
+                    response = {"status": "error", "message": "无效的认证信息"}
+                except Exception as e:
+                    logger.error(f"处理问卷提交时出错: {str(e)}")
+                    print(f"处理问卷提交时出错: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    response = {"status": "error", "message": f"处理问卷提交时出错: {str(e)}"}
         elif self.path == '/chat/follow_up':  # 处理后续对话
             # 验证 token
             auth_header = self.headers.get('Authorization')
@@ -420,143 +515,16 @@ class AuthHandler(BaseHTTPRequestHandler):
                     payload = jwt.decode(token, os.getenv('JWT_SECRET', 'your-secret-key'), algorithms=['HS256'])
                     user_id = payload['user_id']
                     
-                    # 添加调试日志
-                    print("=" * 80)
-                    print(f"[/chat/follow_up] 处理后续对话，用户ID: {user_id}")
-                    print(f"[/chat/follow_up] 接收到的完整数据: {data}")
-                    print(f"[/chat/follow_up] 前端传入的Mode参数: {data.get('mode')}")
-                    
-                    # 检查是否提供了mode参数
-                    if 'mode' not in data:
-                        response = {"status": "error", "message": "缺少mode参数，请选择对话模式：'simulation'(场景模拟)或'solution'(解决方案)"}
-                        self.wfile.write(json.dumps(response).encode('utf-8'))
-                        return
-                    
-                    # 验证mode参数值是否有效
-                    if data['mode'] not in ['simulation', 'solution']:
-                        response = {"status": "error", "message": "mode参数值无效，只能是'simulation'(场景模拟)或'solution'(解决方案)"}
-                        self.wfile.write(json.dumps(response).encode('utf-8'))
-                        return
-                    
-                    # 记录用户选择的确定模式
-                    selected_mode = data['mode']
-                    logger.info(f"后续对话使用模式: {selected_mode}")
-                    print(f"[/chat/follow_up] 初始模式: {selected_mode}")
-                    
-                    # 获取聊天ID
-                    original_chat_id = data.get('chatId')
-                    if not original_chat_id:
-                        response = {"status": "error", "message": "缺少聊天ID"}
-                        self.wfile.write(json.dumps(response).encode('utf-8'))
-                        return
-                    
-                    # 标准化处理聊天ID
-                    chat_id = normalize_chat_id(original_chat_id)
-                    print(f"[/chat/follow_up] 原始聊天ID: {original_chat_id}, 标准化后: {chat_id}")
-                    
-                    # 获取聊天信息以确定正确的模式
-                    session = Session()
-                    try:
-                        # 尝试查询聊天记录
-                        chat = session.query(Chat).filter(Chat.id == chat_id).first()
-                        print(f"[/chat/follow_up] 查询结果(id={chat_id}): {chat}")
-                        
-                        if chat is None:
-                            print(f"[/chat/follow_up] 警告：找不到聊天ID为 {chat_id} 的记录")
-                            # 直接查询最近创建的聊天，用于调试
-                            recent_chat = session.query(Chat).order_by(Chat.created_at.desc()).first()
-                            print(f"[/chat/follow_up] 最近创建的聊天: {recent_chat.id if recent_chat else None}")
-                            if recent_chat:
-                                print(f"[/chat/follow_up] 最近聊天标题: {recent_chat.title}")
-                        
-                        if chat and chat.title:
-                            print(f"[/chat/follow_up] 聊天标题: {chat.title}")
-                            # 从聊天标题判断原始模式
-                            if '[场景模拟]' in chat.title:
-                                # 强制使用场景模拟模式，修复模式切换bug
-                                selected_mode = 'simulation'
-                                print(f"[/chat/follow_up] 根据聊天标题，强制使用场景模拟模式: {selected_mode}")
-                            elif '[解决方案]' in chat.title:
-                                selected_mode = 'solution'
-                                print(f"[/chat/follow_up] 根据聊天标题，强制使用解决方案模式: {selected_mode}")
-                            else:
-                                print(f"[/chat/follow_up] 警告：聊天标题 '{chat.title}' 不包含模式信息，使用默认模式")
-                        else:
-                            print(f"[/chat/follow_up] 警告：聊天记录无标题，使用用户提供的模式: {selected_mode}")
-                    except Exception as e:
-                        print(f"[/chat/follow_up] 查询聊天记录时出错: {str(e)}")
-                        import traceback
-                        traceback.print_exc()
-                    finally:
-                        session.close()
-                    
-                    # 构建对话数据，确保mode参数正确传递
-                    chat_data = {
-                        'type': 'follow_up',
-                        'message': data.get('message', ''),
-                        'chatId': chat_id,
-                        'mode': selected_mode  # 使用确定的模式
-                    }
-                    print(f"[/chat/follow_up] 构建的chat_data: {chat_data}")  # 打印构建的数据
-                    print(f"[/chat/follow_up] 最终使用的模式: {selected_mode}")  # 添加明确的模式日志
-                    
-                    # 生成回复
-                    ai_response = generate_pua_response(chat_data)
-                    logger.info(f"AI响应: {ai_response}")  # 添加日志
-                    print(f"[/chat/follow_up] AI响应模式: {ai_response.get('mode')}")
-                    
-                    # 如果生成成功，保存消息记录
-                    if ai_response['status'] == 'success':
-                        session = Session()
-                        try:
-                            # 保存用户消息
-                            user_message = Message(
-                                chat_id=chat_id,
-                                role='user',
-                                content=data.get('message', ''),
-                                form_data=json.dumps(data.get('images', []))
-                            )
-                            session.add(user_message)
-                            
-                            # 保存AI回复
-                            ai_message = Message(
-                                chat_id=chat_id,
-                                role='assistant',
-                                content=ai_response['advice']
-                            )
-                            session.add(ai_message)
-                            
-                            # 更新聊天的最后活动时间
-                            chat = session.query(Chat).filter(Chat.id == chat_id).first()
-                            if chat:
-                                chat.last_activity = datetime.now(UTC)
-                            
-                            session.commit()
-                            
-                            # 修改响应格式
-                            response = {
-                                "status": "success",
-                                "advice": ai_response['advice'],
-                                "mode": selected_mode  # 将用户选择的模式返回给前端
-                            }
-                            print(f"[/chat/follow_up] 返回给前端的模式: {response['mode']}")
-                            print("=" * 80)
-                        except Exception as e:
-                            session.rollback()
-                            print("保存消息失败:", str(e))  # 添加错误日志
-                            response = {"status": "error", "message": f"保存消息失败: {str(e)}"}
-                        finally:
-                            session.close()
-                    else:
-                        print("AI生成失败:", ai_response)  # 添加错误日志
-                        # 确保错误响应也包含正确的模式
-                        if 'mode' not in ai_response:
-                            ai_response['mode'] = selected_mode
-                        response = ai_response
+                    # 调用处理函数
+                    data['user_id'] = user_id
+                    response = self.handle_chat_message(data)
                 except jwt.ExpiredSignatureError:
                     response = {"status": "error", "message": "登录已过期"}
                 except jwt.InvalidTokenError:
                     response = {"status": "error", "message": "无效的认证信息"}
+                except Exception as e:
+                    print(f"处理后续对话时出错: {str(e)}")
+                    response = {"status": "error", "message": str(e)}
         elif self.path == '/':  # 处理新建咨询请求
             # 验证 token
             auth_header = self.headers.get('Authorization')
@@ -1240,22 +1208,45 @@ class AuthHandler(BaseHTTPRequestHandler):
         session = Session()
         try:
             users = session.query(User).all()
-            user_list = [{
-                'id': user.id,
-                'email': user.email,
-                'phone': user.phone,
-                'is_verified': user.is_verified,
-                'created_at': user.created_at.isoformat() if user.created_at else None,
-                'is_admin': getattr(user, 'is_admin', False),
-                'last_login_ip': getattr(user, 'last_login_ip', '未知'),
-                'last_login_time': user.last_login_time.isoformat() if getattr(user, 'last_login_time', None) else '未知'
-            } for user in users]
+            user_list = []
+            
+            for user in users:
+                # 查询用户最新的问卷和报告信息
+                latest_questionnaire = session.query(Questionnaire).filter(
+                    Questionnaire.user_id == user.id
+                ).order_by(Questionnaire.created_at.desc()).first()
+                
+                report_preview_link = None
+                if latest_questionnaire and latest_questionnaire.has_report:
+                    # 查询问卷对应的报告
+                    response = session.query(QuestionnaireResponse).filter(
+                        QuestionnaireResponse.questionnaire_id == latest_questionnaire.id
+                    ).first()
+                    if response:
+                        report_preview_link = response.preview_link
+                
+                user_data = {
+                    'id': user.id,
+                    'email': user.email,
+                    'phone': user.phone,
+                    'is_verified': user.is_verified,
+                    'created_at': user.created_at.isoformat() if user.created_at else None,
+                    'is_admin': getattr(user, 'is_admin', False),
+                    'last_login_ip': getattr(user, 'last_login_ip', '未知'),
+                    'last_login_time': user.last_login_time.isoformat() if getattr(user, 'last_login_time', None) else '未知',
+                    'is_paid': getattr(user, 'is_paid', False),
+                    'has_report': True if report_preview_link else False,
+                    'report_link': report_preview_link
+                }
+                user_list.append(user_data)
             
             # 添加一些统计信息
             stats = {
                 'total': len(users),
                 'verified': sum(1 for user in users if user.is_verified),
-                'admins': sum(1 for user in users if getattr(user, 'is_admin', False))
+                'admins': sum(1 for user in users if getattr(user, 'is_admin', False)),
+                'paid': sum(1 for user in users if getattr(user, 'is_paid', False)),
+                'with_report': sum(1 for user in user_list if user['has_report'])
             }
             
             return {"status": "success", "users": user_list, "stats": stats}
@@ -1519,52 +1510,280 @@ class AuthHandler(BaseHTTPRequestHandler):
             session.close()
 
     def handle_admin_delete_user(self, requesting_admin_id, user_id_to_delete):
+        """
+        处理管理员删除用户的请求
+        
+        Args:
+            requesting_admin_id: 发起请求的管理员ID
+            user_id_to_delete: 要删除的用户ID
+        
+        Returns:
+            操作结果信息
+        """
         session = Session()
         try:
-            # 安全检查：禁止管理员删除自己的账户
-            if requesting_admin_id == user_id_to_delete:
-                logger.warning(f"管理员 (ID: {requesting_admin_id}) 尝试删除自己的账户")
-                return {"status": "error", "message": "不能删除自己的账户"}
-            
-            # 查找要删除的用户
-            user = session.query(User).filter(User.id == user_id_to_delete).first()
-            if not user:
-                logger.warning(f"管理员 (ID: {requesting_admin_id}) 尝试删除不存在的用户 (ID: {user_id_to_delete})")
+            # 检查要删除的用户是否存在
+            user_to_delete = session.query(User).filter(User.id == user_id_to_delete).first()
+            if not user_to_delete:
                 return {"status": "error", "message": "用户不存在"}
-
-            logger.info(f"管理员 (ID: {requesting_admin_id}) 开始删除用户 (ID: {user_id_to_delete}, Email: {user.email})")
-
-            # 手动级联删除：先删除关联的 Message，再删除 Chat，最后删除 User
-            # 1. 查找该用户的所有 Chat ID
-            chat_ids = [chat.id for chat in user.chats]
-            
-            if chat_ids:
-                # 2. 删除这些 Chat 关联的所有 Message
-                logger.info(f"准备删除用户 {user_id_to_delete} 的 {len(chat_ids)} 个聊天的消息...")
-                session.query(Message).filter(Message.chat_id.in_(chat_ids)).delete(synchronize_session=False)
-                logger.info(f"已删除用户 {user_id_to_delete} 的消息")
                 
-                # 3. 删除这些 Chat
-                logger.info(f"准备删除用户 {user_id_to_delete} 的 {len(chat_ids)} 个聊天...")
-                session.query(Chat).filter(Chat.id.in_(chat_ids)).delete(synchronize_session=False)
-                logger.info(f"已删除用户 {user_id_to_delete} 的聊天")
-
-            # 4. 删除用户本身
-            logger.info(f"准备删除用户 {user_id_to_delete} 本身...")
-            session.delete(user)
+            # 检查要删除的用户是否是管理员
+            if user_to_delete.is_admin:
+                # 不允许删除管理员
+                return {"status": "error", "message": "不能删除管理员账户"}
             
-            # 提交事务
+            # 处理删除用户的相关聊天记录
+            chats = session.query(Chat).filter(Chat.user_id == user_id_to_delete).all()
+            for chat in chats:
+                # 删除与聊天相关的所有消息
+                session.query(Message).filter(Message.chat_id == chat.id).delete()
+                
+            # 删除用户的所有聊天
+            session.query(Chat).filter(Chat.user_id == user_id_to_delete).delete()
+            
+            # 删除用户的验证码记录
+            session.query(VerificationCode).filter(
+                (VerificationCode.identifier == user_to_delete.email) | 
+                (VerificationCode.identifier == user_to_delete.phone)
+            ).delete()
+            
+            # 删除用户本身
+            session.delete(user_to_delete)
             session.commit()
-            logger.info(f"管理员 (ID: {requesting_admin_id}) 成功删除用户 (ID: {user_id_to_delete})")
             
-            return {"status": "success", "message": f"用户 {user.email} (ID: {user_id_to_delete}) 已被成功删除"}
-
+            return {"status": "success", "message": "用户删除成功"}
         except Exception as e:
             session.rollback()
-            logger.error(f"管理员 (ID: {requesting_admin_id}) 删除用户 (ID: {user_id_to_delete}) 时出错: {e}", exc_info=True)
-            return {"status": "error", "message": f"删除用户时发生内部错误: {e}"}
+            logger.error(f"删除用户时出错: {str(e)}")
+            return {"status": "error", "message": f"删除用户时出错: {str(e)}"}
         finally:
             session.close()
+    
+    def handle_questionnaire_submit(self, user_id, data):
+        """
+        处理问卷提交请求
+        
+        Args:
+            user_id: 用户ID
+            data: 问卷数据，包含每个问题的答案
+            
+        Returns:
+            包含状态信息的字典
+        """
+        try:
+            # 检查数据格式
+            if not isinstance(data, dict) or 'answers' not in data:
+                return {
+                    "status": "error",
+                    "message": "无效的问卷数据格式"
+                }
+                
+            answers_data = data['answers']
+            
+            # 添加用户ID到问卷数据中，用于更新用户has_pdf字段
+            answers_data['user_id'] = user_id
+                
+            # 保存问卷数据到数据库
+            save_result = save_questionnaire(user_id, answers_data)
+            if save_result['status'] == 'error':
+                return save_result
+                
+            questionnaire_id = save_result['questionnaire_id']
+            
+            # 生成报告
+            report_result = generate_questionnaire_report(answers_data)
+            if report_result['status'] == 'error':
+                return report_result
+                
+            # 保存报告响应
+            save_response_result = save_questionnaire_response(
+                questionnaire_id, 
+                report_result['report'], 
+                report_result['preview_link']
+            )
+            if save_response_result['status'] == 'error':
+                return save_response_result
+                
+            # 返回成功信息
+            return {
+                "status": "success",
+                "message": "问卷提交成功，报告已生成",
+                "preview_link": report_result['preview_link']
+            }
+        except Exception as e:
+            logger.error(f"处理问卷提交请求时出错: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"处理问卷提交请求时出错: {str(e)}"
+            }
+    
+    def handle_get_user_questionnaires(self, user_id):
+        """
+        获取用户的问卷列表
+        
+        Args:
+            user_id: 用户ID
+            
+        Returns:
+            包含问卷列表的字典
+        """
+        try:
+            session = Session()
+            try:
+                # 查询用户的所有问卷，按创建时间倒序排列
+                questionnaires = session.query(Questionnaire).filter(
+                    Questionnaire.user_id == user_id
+                ).order_by(Questionnaire.created_at.desc()).all()
+                
+                # 格式化问卷数据
+                formatted_questionnaires = []
+                for questionnaire in questionnaires:
+                    # 查询问卷对应的报告响应
+                    response = session.query(QuestionnaireResponse).filter(
+                        QuestionnaireResponse.questionnaire_id == questionnaire.id
+                    ).first()
+                    
+                    formatted_questionnaires.append({
+                        "id": questionnaire.id,
+                        "created_at": questionnaire.created_at.isoformat(),
+                        "has_report": questionnaire.has_report,
+                        "preview_link": response.preview_link if response else None
+                    })
+                
+                return {
+                    "status": "success",
+                    "questionnaires": formatted_questionnaires
+                }
+            except Exception as e:
+                logger.error(f"查询用户问卷列表失败: {str(e)}")
+                return {
+                    "status": "error",
+                    "message": f"查询用户问卷列表失败: {str(e)}"
+                }
+            finally:
+                session.close()
+        except Exception as e:
+            logger.error(f"处理获取用户问卷列表请求时出错: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"处理获取用户问卷列表请求时出错: {str(e)}"
+            }
+    
+    def handle_preview_report(self, preview_id):
+        """
+        处理报告预览请求
+        
+        Args:
+            preview_id: 预览ID
+            
+        Returns:
+            包含报告内容的字典
+        """
+        try:
+            print(f"处理预览报告请求，预览ID: {preview_id}")
+            # 从数据库中查找对应的报告
+            session = Session()
+            try:
+                # 更精确的查询，采用SQL LIKE语句直接找到匹配的报告
+                print("开始查询问卷响应数据")
+                query = session.query(QuestionnaireResponse).filter(
+                    QuestionnaireResponse.preview_link.like(f"%{preview_id}%")
+                )
+                responses = query.all()
+                print(f"找到 {len(responses)} 条匹配预览ID的问卷响应记录")
+                
+                # 调试: 打印所有response的preview_link
+                for idx, response in enumerate(responses):
+                    print(f"Response #{idx+1}, ID: {response.id}, Preview Link: {response.preview_link}")
+                
+                # 如果没有通过LIKE查询找到，则尝试加载所有记录进行精确匹配
+                if not responses:
+                    print(f"通过SQL LIKE未找到匹配，尝试加载所有记录进行精确匹配")
+                    all_responses = session.query(QuestionnaireResponse).all()
+                    print(f"总共有 {len(all_responses)} 条问卷响应记录")
+                    
+                    # 手动筛选匹配预览ID的记录
+                    matching_responses = []
+                    for resp in all_responses:
+                        if resp.preview_link and preview_id in resp.preview_link:
+                            matching_responses.append(resp)
+                            print(f"手动匹配找到记录: ID={resp.id}, PreviewLink={resp.preview_link}")
+                    
+                    responses = matching_responses
+                    print(f"手动筛选后找到 {len(responses)} 条匹配的记录")
+                
+                if not responses:
+                    print(f"未找到匹配 '{preview_id}' 的报告")
+                    return {
+                        "status": "error",
+                        "message": "未找到对应的报告"
+                    }
+                
+                # 使用找到的第一条匹配记录
+                found_response = responses[0]
+                print(f"使用匹配的响应，ID: {found_response.id}")
+                
+                # 获取关联的问卷
+                questionnaire = session.query(Questionnaire).filter(
+                    Questionnaire.id == found_response.questionnaire_id
+                ).first()
+                
+                if questionnaire:
+                    print(f"找到关联问卷，ID: {questionnaire.id}")
+                else:
+                    print("未找到关联问卷")
+                
+                # 获取用户信息
+                user = None
+                if questionnaire:
+                    user = session.query(User).filter(
+                        User.id == questionnaire.user_id
+                    ).first()
+                    
+                    if user:
+                        print(f"找到关联用户，ID: {user.id}, Email: {user.email}")
+                    else:
+                        print("未找到关联用户")
+                
+                # 返回报告内容
+                content_length = len(found_response.response_content) if found_response.response_content else 0
+                print(f"返回报告，内容长度: {content_length}")
+                
+                # 检查内容格式
+                if content_length > 0:
+                    content_sample = (found_response.response_content[:100] + '...') if content_length > 100 else found_response.response_content
+                    print(f"报告内容示例: {content_sample}")
+                else:
+                    print("警告: 报告内容为空")
+                
+                return {
+                    "status": "success",
+                    "report": found_response.response_content or "",
+                    "created_at": found_response.created_at.isoformat() if found_response.created_at else None,
+                    "user_info": {
+                        "email": user.email if user else None
+                    } if user else None
+                }
+            except Exception as e:
+                logger.error(f"查询报告时出错: {str(e)}")
+                print(f"查询报告时出错: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return {
+                    "status": "error",
+                    "message": f"查询报告时出错: {str(e)}"
+                }
+            finally:
+                session.close()
+        except Exception as e:
+            logger.error(f"处理报告预览请求时出错: {str(e)}")
+            print(f"处理报告预览请求时出错: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "status": "error",
+                "message": f"处理报告预览请求时出错: {str(e)}"
+            }
 
 def verify_code(identifier, code):
     """验证短信验证码"""

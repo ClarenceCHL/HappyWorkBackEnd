@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, JSON
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, JSON, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -29,6 +29,8 @@ class User(Base):
     
     # 添加与Chat的关系
     chats = relationship("Chat", back_populates="user")
+    # 添加与Questionnaire的关系
+    questionnaires = relationship("Questionnaire", back_populates="user")
     
     @staticmethod
     def is_valid_email(email):
@@ -90,5 +92,30 @@ class Message(Base):
     
     # 关系
     chat = relationship("Chat", back_populates="messages")
+
+class Questionnaire(Base):
+    __tablename__ = 'questionnaires'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    answers = Column(Text, nullable=False)  # 存储问卷答案的JSON字符串
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    has_report = Column(Boolean, default=False)  # 是否已生成报告
+    
+    # 关系
+    user = relationship("User", back_populates="questionnaires")
+    responses = relationship("QuestionnaireResponse", back_populates="questionnaire")
+
+class QuestionnaireResponse(Base):
+    __tablename__ = 'questionnaire_responses'
+    
+    id = Column(Integer, primary_key=True)
+    questionnaire_id = Column(Integer, ForeignKey('questionnaires.id'))
+    response_content = Column(Text, nullable=False)  # 存储AI回复的JSON字符串
+    preview_link = Column(String(255), nullable=True)  # 预览链接
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # 关系
+    questionnaire = relationship("Questionnaire", back_populates="responses")
 
 Base.metadata.create_all(engine)

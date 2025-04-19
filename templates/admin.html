@@ -848,11 +848,14 @@
                             <td data-label="邮箱">${user.email || '-'}</td>
                             <td data-label="已验证">${user.is_verified ? '是' : '否'}</td>
                             <td data-label="管理员">${user.is_admin ? '是' : '否'}</td>
+                            <td data-label="已购买">${user.is_paid ? '是' : '否'}</td>
+                            <td data-label="有报告">${user.has_report ? '是' : '否'}</td>
                             <td data-label="最后登录IP">${user.last_login_ip || '-'}</td>
                             <td data-label="最后登录时间">${user.last_login_time ? new Date(user.last_login_time).toLocaleString('zh-CN') : '-'}</td>
                             <td data-label="注册时间">${createdAt}</td>
                             <td data-label="操作">
                                 <button class="btn btn-danger" onclick="adminConsole.deleteUser(${user.id})">删除</button>
+                                ${user.has_report ? `<button class="btn" onclick="adminConsole.viewReport('${user.report_link}')">查看报告</button>` : ''}
                             </td>
                         </tr>
                     `;
@@ -874,6 +877,14 @@
                                 <div class="stat-value">${stats.admins}</div>
                                 <div class="stat-label">管理员数量</div>
                             </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.paid}</div>
+                                <div class="stat-label">已购买用户</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.with_report}</div>
+                                <div class="stat-label">有报告用户</div>
+                            </div>
                         </div>
                     </div>
                     
@@ -886,6 +897,8 @@
                                     <th>邮箱</th>
                                     <th>已验证</th>
                                     <th>管理员</th>
+                                    <th>已购买</th>
+                                    <th>有报告</th>
                                     <th>最后登录IP</th>
                                     <th>最后登录时间</th>
                                     <th>注册时间</th>
@@ -1367,6 +1380,28 @@
                 } catch (error) {
                     console.error('删除用户请求出错:', error);
                     alert('删除用户请求失败，请检查网络连接或查看控制台日志。');
+                }
+            }
+            
+            /**
+             * 查看用户报告
+             */
+            async viewReport(reportLink) {
+                if (!reportLink) {
+                    alert('没有找到报告链接');
+                    return;
+                }
+                
+                try {
+                    // 从reportLink中提取预览ID
+                    const previewId = reportLink.split('/').pop();
+                    
+                    // 打开新窗口查看报告
+                    const reportUrl = `/preview/${previewId}`;
+                    window.open(reportUrl, '_blank');
+                } catch (error) {
+                    console.error('查看报告出错:', error);
+                    alert('无法打开报告，请检查控制台日志');
                 }
             }
         }
