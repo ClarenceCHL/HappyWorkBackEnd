@@ -301,6 +301,9 @@ class AuthHandler(BaseHTTPRequestHandler):
                 print(f"支付会话响应: {response}")
                 
                 self._set_response_headers()
+                # 确保响应是有效的JSON格式
+                if response is None:
+                    response = {"status": "error", "message": "服务器返回了空响应"}
                 self.wfile.write(json.dumps(response).encode('utf-8'))
                 return
             except Exception as e:
@@ -1915,6 +1918,13 @@ class AuthHandler(BaseHTTPRequestHandler):
                 
                 print(f"Stripe会话创建成功，URL: {checkout_session.url}")
                 print(f"会话ID: {checkout_session.id}")
+                
+                # 确保返回有效的JSON格式响应
+                if not checkout_session or not checkout_session.url:
+                    return {
+                        "status": "error",
+                        "message": "支付会话创建失败: 未能获取支付URL"
+                    }
                 
                 return {
                     "status": "success",
