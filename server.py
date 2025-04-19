@@ -350,27 +350,6 @@ class AuthHandler(BaseHTTPRequestHandler):
             response = self.handle_verify_payment(user_id, data)
             self.wfile.write(json.dumps(response).encode())
             return
-        elif self.path == '/api/force-update-payment-status':
-            # 处理强制更新支付状态的请求
-            self._set_response_headers()
-            
-            # 检查授权
-            auth_header = self.headers.get('Authorization')
-            if not auth_header or not auth_header.startswith('Bearer '):
-                self.wfile.write(json.dumps({"status": "error", "message": "未授权访问"}).encode())
-                return
-                
-            token = auth_header.split(' ')[1]
-            user_id = self.verify_token(token)
-            
-            if not user_id:
-                self.wfile.write(json.dumps({"status": "error", "message": "无效的用户令牌"}).encode())
-                return
-            
-            # 强制更新用户支付状态
-            response = self.handle_force_update_payment_status(user_id)
-            self.wfile.write(json.dumps(response).encode())
-            return
         
         # 对其他所有路由使用原始的处理逻辑
         self._set_response_headers()
@@ -2106,40 +2085,6 @@ class AuthHandler(BaseHTTPRequestHandler):
         except Exception as e:
             logger.error(f"检查支付状态时出错: {str(e)}")
             return {"status": "error", "message": f"检查支付状态失败: {str(e)}"}
-        finally:
-            session.close()
-            
-    def handle_force_update_payment_status(self, user_id):
-        """强制更新用户支付状态为已支付（仅用于解决支付状态同步问题）"""
-        try:
-            session = Session()
-            user = session.query(User).filter(User.id == user_id).first()
-            
-            if not user:
-                return {"status": "error", "message": "用户不存在"}
-            
-            # 如果用户已经标记为已支付，则不需要更新
-            if user.is_paid:
-                return {"status": "success", "message": "用户已标记为已支付", "is_paid": True}
-            
-            # 强制更新用户支付状态
-            user.is_paid = True
-            user.payment_time = datetime.now(UTC)
-            user.payment_id = f"force_update_{int(datetime.now(UTC).timestamp())}"
-            session.commit()
-            
-            logger.info(f"用户 {user_id} 的支付状态已被强制更新为已支付")
-            return {
-                "status": "success", 
-                "message": "支付状态已强制更新为已支付",
-                "is_paid": True,
-                "payment_time": user.payment_time.isoformat()
-            }
-            
-        except Exception as e:
-            session.rollback()
-            logger.error(f"强制更新支付状态时出错: {str(e)}")
-            return {"status": "error", "message": f"更新支付状态失败: {str(e)}"}
         finally:
             session.close()
 
