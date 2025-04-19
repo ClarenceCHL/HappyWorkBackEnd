@@ -271,6 +271,28 @@ class AuthHandler(BaseHTTPRequestHandler):
                     response = {"status": "error", "message": "缺少聊天ID"}
                 else:
                     response = self.handle_get_chat_history(user_id, chat_id)
+            # 检查支付状态的API
+            elif self.path == '/api/check-payment-status':
+                # 检查授权
+                auth_header = self.headers.get('Authorization')
+                if not auth_header or not auth_header.startswith('Bearer '):
+                    self._set_response_headers()
+                    self.wfile.write(json.dumps({"status": "error", "message": "未授权访问"}).encode())
+                    return
+                    
+                token = auth_header.split(' ')[1]
+                user_id = self.verify_token(token)
+                
+                if not user_id:
+                    self._set_response_headers()
+                    self.wfile.write(json.dumps({"status": "error", "message": "无效的用户令牌"}).encode())
+                    return
+                
+                # 获取用户支付状态
+                response = self.handle_check_payment_status(user_id)
+                self._set_response_headers()
+                self.wfile.write(json.dumps(response).encode())
+                return
             else:
                 response = {"status": "error", "message": "Invalid endpoint"}
                 
@@ -2041,6 +2063,28 @@ class AuthHandler(BaseHTTPRequestHandler):
         except Exception as e:
             logger.error(f"验证支付状态时出错: {str(e)}")
             return {"status": "error", "message": f"验证支付状态失败: {str(e)}"}
+        finally:
+            session.close()
+
+    def handle_check_payment_status(self, user_id):
+        """检查用户支付状态"""
+        try:
+            session = Session()
+            user = session.query(User).filter(User.id == user_id).first()
+            
+            if not user:
+                return {"status": "error", "message": "用户不存在"}
+                
+            # 返回用户支付状态
+            return {
+                "status": "success", 
+                "is_paid": user.is_paid,
+                "payment_time": user.payment_time.isoformat() if user.payment_time else None
+            }
+            
+        except Exception as e:
+            logger.error(f"检查支付状态时出错: {str(e)}")
+            return {"status": "error", "message": f"检查支付状态失败: {str(e)}"}
         finally:
             session.close()
 
