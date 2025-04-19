@@ -499,6 +499,42 @@
                 display: none !important;
             }
             
+            /* 添加页面设置，隐藏页眉和页脚中的URL */
+            @page {
+                margin: 0.5cm;
+                size: auto;
+            }
+            @page :first {
+                margin-top: 0;
+            }
+            @page :left {
+                margin-left: 0;
+            }
+            @page :right {
+                margin-right: 0;
+            }
+            
+            /* 隐藏所有打印机添加的页眉和页脚 */
+            html {
+                -webkit-print-color-adjust: exact !important;
+            }
+            
+            /* 强制Chrome隐藏头部和底部的内容 */
+            @media print and (-webkit-min-device-pixel-ratio:0) {
+                body {
+                    margin: 0 !important;
+                    padding: 0 !important;
+                }
+                
+                @page {
+                    margin: 0 !important;
+                }
+                
+                html {
+                    overflow: hidden !important;
+                }
+            }
+            
             .report-container {
                 box-shadow: none;
                 padding: 0;
@@ -559,7 +595,7 @@
             <line x1="19" y1="12" x2="5" y2="12"></line>
             <polyline points="12 19 5 12 12 5"></polyline>
         </svg>
-        返回主页
+        返回
     </button>
 
     <div class="report-container animate__animated animate__fadeIn">
