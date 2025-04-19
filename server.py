@@ -288,38 +288,45 @@ class AuthHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         # 处理Stripe支付相关的路由
         if self.path == '/api/create-checkout-session':
-            print(f"收到创建支付会话请求: {self.path}")
-            # 获取请求体数据
+            self._set_response_headers()
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length).decode('utf-8')
-            try:
-                data = json.loads(post_data)
-                print(f"请求数据: {data}")
-                
-                # 处理创建Stripe Checkout会话的请求
-                response = self.handle_create_checkout_session(data)
-                print(f"支付会话响应: {response}")
-                
-                self._set_response_headers()
-                # 确保响应是有效的JSON格式
-                if response is None:
-                    response = {"status": "error", "message": "服务器返回了空响应"}
-                self.wfile.write(json.dumps(response).encode('utf-8'))
-                return
-            except Exception as e:
-                print(f"处理支付请求时出错: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                self._set_response_headers()
-                response = {"status": "error", "message": f"处理支付请求时出错: {str(e)}"}
-                self.wfile.write(json.dumps(response).encode('utf-8'))
-                return
+            data = json.loads(post_data)
+            
+            # 处理创建Stripe Checkout会话的请求
+            response = self.handle_create_checkout_session(data)
+            self.wfile.write(json.dumps(response).encode())
+            return
         elif self.path == '/api/webhook/stripe':
             print(f"收到Stripe webhook请求: {self.path}")
             # 处理Stripe Webhook
             response = self.handle_stripe_webhook()
             self._set_response_headers()
-            self.wfile.write(json.dumps(response).encode('utf-8'))
+            self.wfile.write(json.dumps(response).encode())
+            return
+        elif self.path == '/api/verify-payment':
+            # 处理验证支付状态的请求
+            self._set_response_headers()
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length).decode('utf-8')
+            data = json.loads(post_data)
+            
+            # 检查授权
+            auth_header = self.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                self.wfile.write(json.dumps({"status": "error", "message": "未授权访问"}).encode())
+                return
+                
+            token = auth_header.split(' ')[1]
+            user_id = self.verify_token(token)
+            
+            if not user_id:
+                self.wfile.write(json.dumps({"status": "error", "message": "无效的用户令牌"}).encode())
+                return
+                
+            # 验证用户支付状态
+            response = self.handle_verify_payment(user_id, data)
+            self.wfile.write(json.dumps(response).encode())
             return
         
         # 对其他所有路由使用原始的处理逻辑
@@ -1994,6 +2001,48 @@ class AuthHandler(BaseHTTPRequestHandler):
         except Exception as e:
             logger.error(f"处理Stripe Webhook时出错: {str(e)}")
             return {"status": "error", "message": f"处理支付回调失败: {str(e)}"}
+
+    def handle_verify_payment(self, user_id, data):
+        """验证用户支付状态"""
+        try:
+            session = Session()
+            user = session.query(User).filter(User.id == user_id).first()
+            
+            if not user:
+                return {"status": "error", "message": "用户不存在"}
+                
+            # 检查用户是否已付费
+            if user.is_paid:
+                return {"status": "success", "is_paid": True, "message": "用户已完成支付"}
+                
+            # 如果用户未标记为已支付，则尝试从Stripe获取最新状态
+            # 这在webhook可能延迟或失败的情况下作为备份
+            session_id = data.get('session_id')
+            if session_id and session_id.startswith('cs_'):
+                try:
+                    # 查询Stripe以获取会话状态
+                    stripe_session = stripe.checkout.Session.retrieve(session_id)
+                    
+                    # 检查支付状态
+                    if stripe_session.payment_status == 'paid':
+                        # 更新用户支付状态
+                        user.is_paid = True
+                        user.payment_time = datetime.now(UTC)
+                        user.payment_id = stripe_session.id
+                        session.commit()
+                        logger.info(f"通过API验证更新了用户 {user_id} 的支付状态")
+                        return {"status": "success", "is_paid": True, "message": "支付状态已更新"}
+                except Exception as e:
+                    logger.error(f"从Stripe获取会话状态时出错: {str(e)}")
+            
+            # 如果所有检查都未成功，返回未支付状态
+            return {"status": "success", "is_paid": False, "message": "用户尚未完成支付"}
+            
+        except Exception as e:
+            logger.error(f"验证支付状态时出错: {str(e)}")
+            return {"status": "error", "message": f"验证支付状态失败: {str(e)}"}
+        finally:
+            session.close()
 
 def verify_code(identifier, code):
     """验证短信验证码"""
