@@ -25,6 +25,84 @@
             background-color: var(--dark-bg);
             color: var(--text-light);
             font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            position: relative;
+            overflow-x: hidden;
+        }
+        
+        /* 背景图案装饰 */
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(245, 158, 11, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 90% 80%, rgba(29, 78, 216, 0.05) 0%, transparent 50%);
+            z-index: -2;
+        }
+        
+        /* 几何图案装饰 */
+        .geometric-shapes {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            z-index: -1;
+            overflow: hidden;
+            opacity: 0.4;
+        }
+        
+        .shape {
+            position: absolute;
+            opacity: 0.2;
+            filter: blur(1px);
+        }
+        
+        .shape-1 {
+            top: 10%;
+            left: 5%;
+            width: 250px;
+            height: 250px;
+            border: 2px solid var(--primary-color);
+            border-radius: 50%;
+            animation: float 15s ease-in-out infinite;
+        }
+        
+        .shape-2 {
+            top: 60%;
+            right: 5%;
+            width: 200px;
+            height: 200px;
+            border: 2px solid #3b82f6;
+            transform: rotate(45deg);
+            animation: float 18s ease-in-out infinite reverse;
+        }
+        
+        .shape-3 {
+            bottom: 10%;
+            left: 15%;
+            width: 150px;
+            height: 150px;
+            background: linear-gradient(45deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0));
+            border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
+            animation: morph 15s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0% { transform: translateY(0) rotate(0); }
+            50% { transform: translateY(-20px) rotate(5deg); }
+            100% { transform: translateY(0) rotate(0); }
+        }
+        
+        @keyframes morph {
+            0% { border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; }
+            25% { border-radius: 70% 30% 30% 70% / 70% 70% 30% 30%; }
+            50% { border-radius: 30% 70% 70% 30% / 70% 30% 70% 30%; }
+            75% { border-radius: 70% 30% 30% 70% / 30% 70% 30% 70%; }
+            100% { border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; }
         }
         
         .report-container {
@@ -33,7 +111,33 @@
             padding: 2.5rem;
             background-color: var(--card-bg);
             border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3), 0 0 1px rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3), 0 0 1px rgba(255, 255, 255, 0.1),
+                        0 0 15px rgba(245, 158, 11, 0.2); /* 添加光晕效果 */
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+            backdrop-filter: blur(5px);
+        }
+        
+        /* 报告容器边框光效 */
+        .report-container::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, 
+                transparent, 
+                var(--primary-color), 
+                transparent);
+            animation: borderLight 4s ease-in-out infinite;
+        }
+        
+        @keyframes borderLight {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
         }
         
         .brand-logo {
@@ -41,8 +145,10 @@
             align-items: center;
             justify-content: center;
             margin-bottom: 1.5rem;
+            position: relative;
         }
         
+        /* Logo发光效果 */
         .shield-logo {
             width: 50px;
             height: 50px;
@@ -51,6 +157,7 @@
             justify-content: center;
             margin-right: 12px;
             position: relative;
+            filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.5));
         }
         
         .shield-svg {
@@ -68,6 +175,20 @@
             margin-top: 1.5em;
             margin-bottom: 0.8em;
             font-weight: 600;
+            position: relative;
+            display: inline-block;
+        }
+        
+        /* 标题装饰效果 */
+        .markdown-content h1::after, .markdown-content h2::after {
+            content: "";
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, var(--primary-color), transparent);
+            border-radius: 2px;
         }
         
         .markdown-content h1 {
@@ -106,6 +227,7 @@
             margin: 1.5em 0;
             background-color: rgba(245, 158, 11, 0.1);
             border-radius: 0 4px 4px 0;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
         
         .markdown-content pre {
@@ -138,6 +260,24 @@
             background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(29, 78, 216, 0.1) 100%);
             border-radius: 8px;
             z-index: 0;
+            overflow: hidden;
+        }
+        
+        /* 添加动态光效 */
+        .header-background::before {
+            content: "";
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            top: -50%;
+            left: -50%;
+            background: radial-gradient(circle at center, rgba(245, 158, 11, 0.2) 0%, transparent 40%);
+            animation: rotate 20s linear infinite;
+        }
+        
+        @keyframes rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
         
         .header-content {
@@ -151,6 +291,28 @@
             border-radius: 3px;
             margin: 1.5rem 0;
             width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* 添加流光效果 */
+        .gradient-line::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(90deg, 
+                transparent, 
+                rgba(255, 255, 255, 0.3), 
+                transparent);
+            animation: flowLight 3s ease-in-out infinite;
+        }
+        
+        @keyframes flowLight {
+            0% { left: -100%; }
+            100% { left: 100%; }
         }
         
         .print-btn {
@@ -162,16 +324,37 @@
             cursor: pointer;
             transition: all 0.3s ease;
             border: none;
-            box-shadow: 0 4px 6px rgba(245, 158, 11, 0.3);
+            box-shadow: 0 4px 6px rgba(245, 158, 11, 0.3), 
+                        0 0 10px rgba(245, 158, 11, 0.2); /* 添加光晕 */
             display: flex;
             align-items: center;
             gap: 6px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* 按钮光效 */
+        .print-btn::after {
+            content: "";
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.3) 0%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
         
         .print-btn:hover {
             background-color: var(--primary-light);
             transform: translateY(-2px);
-            box-shadow: 0 6px 8px rgba(245, 158, 11, 0.4);
+            box-shadow: 0 6px 8px rgba(245, 158, 11, 0.4),
+                        0 0 15px rgba(245, 158, 11, 0.3);
+        }
+        
+        .print-btn:hover::after {
+            opacity: 1;
         }
         
         .print-btn:active {
@@ -184,33 +367,96 @@
             padding: 1.5rem;
             border-radius: 0 0 8px 8px;
             margin: 2rem -2.5rem -2.5rem -2.5rem;
+            position: relative;
+            overflow: hidden;
         }
         
-        @media print {
-            body {
-                background-color: white;
-                color: #1f2937;
-            }
-            .report-container {
-                box-shadow: none;
-                padding: 0;
-                background-color: white;
-                max-width: 100%;
-            }
-            .print-section {
-                display: none !important;
-            }
-            .markdown-content h1, .markdown-content h2, .markdown-content h3, .markdown-content h4 {
-                color: var(--primary-dark);
-            }
-            .report-footer {
-                border-top: 1px solid #e5e7eb;
-                background-color: white;
-                color: #6b7280;
-            }
-            .header-background {
-                display: none;
-            }
+        /* 页脚装饰 */
+        .report-footer::before {
+            content: "";
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 1px;
+            background: linear-gradient(90deg, 
+                transparent, 
+                rgba(245, 158, 11, 0.3), 
+                transparent);
+        }
+        
+        /* 返回按钮样式 */
+        .back-btn {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background-color: var(--primary-color);
+            color: #000;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2),
+                        0 0 10px rgba(245, 158, 11, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 999;
+        }
+        
+        .back-btn:hover {
+            background-color: var(--primary-light);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.3),
+                        0 0 15px rgba(245, 158, 11, 0.3);
+        }
+        
+        .back-btn:active {
+            transform: translateY(0);
+        }
+        
+        .back-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+        
+        .content-box {
+            background-color: rgba(17, 24, 39, 0.5);
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 1.5rem 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(2px);
+        }
+        
+        /* 内容框装饰角 */
+        .content-box::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 20px;
+            height: 20px;
+            border-top: 2px solid var(--primary-color);
+            border-left: 2px solid var(--primary-color);
+            opacity: 0.6;
+        }
+        
+        .content-box::after {
+            content: "";
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 20px;
+            height: 20px;
+            border-bottom: 2px solid var(--primary-color);
+            border-right: 2px solid var(--primary-color);
+            opacity: 0.6;
         }
         
         /* 加载效果 */
@@ -228,22 +474,94 @@
             border-radius: 50%;
             border-top-color: var(--primary-color);
             animation: spin 1s ease-in-out infinite;
+            filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.5));
         }
         
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
         
-        .content-box {
-            background-color: rgba(17, 24, 39, 0.5);
-            border-radius: 8px;
-            padding: 2rem;
-            margin: 1.5rem 0;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+        @media print {
+            body {
+                background-color: white;
+                color: #1f2937;
+            }
+            
+            /* 打印时隐藏所有装饰元素 */
+            body::before,
+            .geometric-shapes,
+            .header-background::before,
+            .gradient-line::after,
+            .report-container::after,
+            .content-box::before,
+            .content-box::after,
+            .report-footer::before {
+                display: none !important;
+            }
+            
+            .report-container {
+                box-shadow: none;
+                padding: 0;
+                background-color: white;
+                max-width: 100%;
+            }
+            
+            .print-section {
+                display: none !important;
+            }
+            
+            .markdown-content h1, .markdown-content h2, .markdown-content h3, .markdown-content h4 {
+                color: var(--primary-dark);
+            }
+            
+            .markdown-content h1::after, 
+            .markdown-content h2::after {
+                display: none;
+            }
+            
+            .report-footer {
+                border-top: 1px solid #e5e7eb;
+                background-color: white;
+                color: #6b7280;
+            }
+            
+            .header-background {
+                display: none;
+            }
+            
+            .back-btn {
+                display: none;
+            }
+            
+            .content-box {
+                border: none;
+                box-shadow: none;
+                background-color: transparent;
+            }
+            
+            .shield-logo {
+                filter: none;
+            }
         }
     </style>
 </head>
 <body class="py-8 px-4">
+    <!-- 装饰背景图形 -->
+    <div class="geometric-shapes">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+        <div class="shape shape-3"></div>
+    </div>
+    
+    <!-- 添加返回按钮 -->
+    <button class="back-btn" id="backButton">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+        返回主页
+    </button>
+
     <div class="report-container animate__animated animate__fadeIn">
         <div class="header-container">
             <div class="header-background"></div>
@@ -396,6 +714,12 @@
         // 打印按钮事件
         document.querySelector('.print-btn').addEventListener('click', function() {
             window.print();
+        });
+        
+        // 返回按钮点击事件
+        document.getElementById('backButton').addEventListener('click', function() {
+            // 返回到PaidFeaturePage
+            window.history.back();
         });
     </script>
 </body>
