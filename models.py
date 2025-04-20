@@ -7,9 +7,30 @@ import random
 import string
 from datetime import datetime, timedelta, UTC
 from werkzeug.security import generate_password_hash, check_password_hash
+import os  # 导入 os 模块
+from dotenv import load_dotenv # 导入 load_dotenv
+
+load_dotenv() # 加载环境变量
 
 Base = declarative_base()
-engine = create_engine('sqlite:///users.db')
+
+# 根据环境变量确定数据库文件路径
+# 获取项目根目录
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+env = os.environ.get('APP_ENV', 'development') # 默认为开发环境
+
+if env == 'production':
+    db_name = 'users.db' # 生产环境使用 users.db
+else:
+    db_name = 'dev_users.db'
+
+# 确保数据库文件路径是相对于项目根目录的绝对路径
+# （如果 models.py 不在项目根目录）
+# 对于你的结构，models.py 在 backend/ 下，所以需要调整路径
+# 数据库文件应该在 backend/ 目录中
+db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), db_name)
+
+engine = create_engine(f'sqlite:///{db_path}')
 
 class User(Base):
     __tablename__ = 'users'

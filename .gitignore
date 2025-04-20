@@ -1,0 +1,16 @@
+# Environment variables
+.env
+
+# SQLite databases
+*.db
+
+# Log files
+*.log
+logs/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS generated files
+.DS_Store 
