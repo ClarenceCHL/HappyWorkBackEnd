@@ -2,16 +2,31 @@ import argparse
 import os
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
-from models import User, Base  # 确保你的 models.py 可以被导入
+# 不直接从 models 导入 Base 和 User，避免循环导入或过早初始化 engine
+# from models import User, Base
 from werkzeug.security import generate_password_hash
 from dotenv import load_dotenv
 
-# 加载环境变量 (如果数据库连接等配置在 .env 文件中)
+# 加载环境变量
 load_dotenv()
 
-# 数据库连接 (与 models.py 或 server.py 保持一致)
-DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///users.db')
+# --- 修改：统一使用 users.db ---
+# 获取脚本所在的 backend 目录
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+db_name = 'users.db' # 始终使用 users.db
+
+# 数据库文件路径（在 backend/ 目录下）
+db_path = os.path.join(backend_dir, db_name)
+DATABASE_URL = f'sqlite:///{db_path}'
+# --- 结束修改 ---
+
+# 数据库连接
 engine = create_engine(DATABASE_URL)
+
+# --- 在 engine 创建之后，再导入 models ---
+from models import User, Base
+# --- 结束 ---
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def create_admin_user(email, password):
