@@ -1,13 +1,6 @@
-Traceback (most recent call last):
-  File "/Users/haoluncheng/Desktop/FkCareerPUA/Project/backend/server.py", line 743, in <module>
-    run()
-  File "/Users/haoluncheng/Desktop/FkCareerPUA/Project/backend/server.py", line 738, in run
-    httpd = server_class(server_address, handler_class)
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/socketserver.py", line 457, in __init__
-    self.server_bind()
-  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/http/server.py", line 136, in server_bind
-    socketserver.TCPServer.server_bind(self)
-  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/socketserver.py", line 473, in server_bind
-    self.socket.bind(self.server_address)
-OSError: [Errno 48] Address already in use
+INFO:__main__:聊天记录清理任务已启动 - 保留30天内的聊天，每24小时清理一次
+INFO:__main__:聊天记录自动清理线程已启动（保留30天，间隔24小时）
+INFO:__main__:开始执行定期清理任务...
+INFO:__main__:Starting server on port 8000...
+INFO:cleanup_chats:没有发现超过30天的聊天记录
+INFO:__main__:清理任务完成，将在24小时后再次执行
