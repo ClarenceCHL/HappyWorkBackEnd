@@ -747,10 +747,20 @@
     </div>
 
     <script>
-        // 获取URL参数
+        // 获取URL参数并检查token
         function getPreviewId() {
             const pathParts = window.location.pathname.split('/');
-            return pathParts[pathParts.length - 1];
+            const id = pathParts[pathParts.length - 1];
+            
+            // 尝试从URL参数中获取token
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlToken = urlParams.get('token');
+            if (urlToken) {
+                localStorage.setItem('token', urlToken);
+                console.log('从URL参数中获取并保存了token');
+            }
+            
+            return id;
         }
 
         // 从 localStorage 获取 Token 的辅助函数

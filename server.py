@@ -1635,6 +1635,12 @@ class AuthHandler(BaseHTTPRequestHandler):
                     Questionnaire.user_id == user_id
                 ).order_by(Questionnaire.created_at.desc()).all()
                 
+                # 获取token
+                auth_header = self.headers.get('Authorization')
+                token = None
+                if auth_header and auth_header.startswith('Bearer '):
+                    token = auth_header.split(' ')[1]
+                
                 # 格式化问卷数据
                 formatted_questionnaires = []
                 for questionnaire in questionnaires:
@@ -1643,11 +1649,19 @@ class AuthHandler(BaseHTTPRequestHandler):
                         QuestionnaireResponse.questionnaire_id == questionnaire.id
                     ).first()
                     
+                    # 处理预览链接，添加token参数
+                    preview_link = None
+                    if response and response.preview_link:
+                        preview_link = response.preview_link
+                        # 如果有token，则添加到预览链接中
+                        if token:
+                            preview_link = f"{preview_link}?token={token}"
+                    
                     formatted_questionnaires.append({
                         "id": questionnaire.id,
                         "created_at": questionnaire.created_at.isoformat(),
                         "has_report": questionnaire.has_report,
-                        "preview_link": response.preview_link if response else None
+                        "preview_link": preview_link
                     })
                 
                 return {
