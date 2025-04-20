@@ -10,15 +10,21 @@ from dotenv import load_dotenv
 # 加载环境变量
 load_dotenv()
 
-# --- 修改：统一使用 users.db ---
+# 根据环境变量选择数据库
+ENV = os.getenv('FLASK_ENV', 'production')
 # 获取脚本所在的 backend 目录
 backend_dir = os.path.dirname(os.path.abspath(__file__))
-db_name = 'users.db' # 始终使用 users.db
+
+if ENV == 'development':
+    db_name = 'dev_users.db'
+    print("使用开发环境数据库: dev_users.db")
+else:
+    db_name = 'users.db'
+    print("使用生产环境数据库: users.db")
 
 # 数据库文件路径（在 backend/ 目录下）
 db_path = os.path.join(backend_dir, db_name)
 DATABASE_URL = f'sqlite:///{db_path}'
-# --- 结束修改 ---
 
 # 数据库连接
 engine = create_engine(DATABASE_URL)

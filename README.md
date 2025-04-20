@@ -1,6 +1,6 @@
-# FkCareerPUA 后端服务
+# Happy Work 后端服务
 
-这是一个基于 Python 的职场 PUA 应对建议系统后端服务。该系统提供智能化的职场 PUA 场景分析和应对建议，帮助用户更好地处理职场中的不合理要求和不公平对待。
+这是一个AI驱动的职场PUA解决方案后端服务。该系统提供智能化的职场 PUA 场景分析和应对建议，帮助用户更好地处理职场中的不合理要求和不公平对待。
 
 ## 功能特点
 
@@ -17,6 +17,10 @@
   - 创建和管理多个聊天会话
   - 完整的聊天历史记录存储
   - 聊天内容持久化存储
+- 📊 问卷评估系统
+  - 用户职场情况问卷调查
+  - 智能分析报告生成
+  - 报告预览功能
 - 👮‍♂️ 管理员系统
   - 用户管理功能
   - 聊天记录查看和管理
@@ -31,6 +35,9 @@
   - 敏感信息环境变量配置
   - 静态文件服务支持
   - HTTP/HTTPS 支持
+- 💰 付费功能
+  - 用户付费状态管理
+  - PDF报告生成和存储
 
 ## 技术栈
 
@@ -41,6 +48,7 @@
 - SQLite 数据库
 - SMTP 邮件服务
 - HTTP 服务器
+- OpenAI API 接口
 
 ## 项目结构
 
@@ -50,20 +58,16 @@ backend/
 ├── models.py                   # 数据库模型
 ├── ai_service.py               # AI 服务集成
 ├── cleanup_chats.py            # 聊天记录清理脚本
-├── migrate_add_login_info.py   # 登录信息迁移脚本
-├── migrate_add_last_activity.py # 最后活动时间迁移脚本
-├── migrate_add_admin.py        # 管理员账户迁移脚本
-├── migrate_db.py               # 数据库通用迁移工具
-├── check_table.py              # 数据库表检查工具
-├── create_test_user.py         # 测试用户创建工具
-├── clear_db.py                 # 数据库清理工具
+├── create_admin.py             # 管理员账户创建脚本
 ├── requirements.txt            # 项目依赖
 ├── .env                        # 环境变量配置
 ├── .env.example                # 环境变量示例配置
 ├── templates/                  # 模板文件
 │   ├── admin.html              # 管理员界面
-│   └── email_verification.html # 邮箱验证模板
-└── users.db                    # SQLite 数据库文件
+│   ├── email_verification.html # 邮箱验证模板
+│   └── preview_report.html     # 报告预览模板
+├── users.db                    # 生产环境 SQLite 数据库文件
+└── dev_users.db                # 开发环境 SQLite 数据库文件
 ```
 
 ## 环境要求
@@ -178,6 +182,26 @@ python server.py
 - **GET** `/chat/{chatId}`
 - 请求头：需要 JWT Token
 
+### 问卷相关
+
+#### 提交问卷
+- **POST** `/questionnaire/submit`
+- 请求头：需要 JWT Token
+- 请求体：
+  ```json
+  {
+    "answers": {...} // 问卷答案数据
+  }
+  ```
+
+#### 获取用户问卷
+- **GET** `/questionnaire/list`
+- 请求头：需要 JWT Token
+
+#### 预览问卷报告
+- **GET** `/preview/{previewId}`
+- 可直接在浏览器访问
+
 ### 用户相关
 
 #### 获取用户信息
@@ -217,6 +241,20 @@ python server.py
 - **GET** `/admin/delete_chat?chat_id={chatId}`
 - 请求头：需要管理员 JWT Token
 
+#### 清空所有聊天记录
+- **GET** `/admin/clear_all_chats`
+- 请求头：需要管理员 JWT Token
+
+#### 删除用户
+- **POST** `/admin/delete_user`
+- 请求头：需要管理员 JWT Token
+- 请求体：
+  ```json
+  {
+    "userId": "要删除的用户ID"
+  }
+  ```
+
 #### 管理员界面
 - **GET** `/admin`
 - 请求头：需要管理员 JWT Token
@@ -247,28 +285,24 @@ PORT=服务器端口号
 ENABLE_CHAT_CLEANUP=true        # 设置为false可禁用自动清理
 CHAT_RETENTION_DAYS=30          # 聊天记录保留天数
 CHAT_CLEANUP_INTERVAL_HOURS=24  # 清理任务执行间隔(小时)
+
+# 数据库配置
+# FLASK_ENV=development         # 取消注释并设置为development以使用开发环境数据库(dev_users.db)
+```
+
+## 管理员创建工具
+
+使用以下命令创建管理员账户：
+
+```bash
+python create_admin.py --email admin@example.com --password admin密码
 ```
 
 ## 开发和维护工具
 
-- `create_test_user.py`: 创建测试用户
+- `create_admin.py`: 创建管理员用户
   ```bash
-  python create_test_user.py
-  ```
-
-- `migrate_db.py`: 数据库通用迁移工具
-  ```bash
-  python migrate_db.py
-  ```
-
-- `check_table.py`: 检查数据库表结构
-  ```bash
-  python check_table.py
-  ```
-
-- `clear_db.py`: 清理数据库数据
-  ```bash
-  python clear_db.py
+  python create_admin.py --email admin@example.com --password admin密码
   ```
 
 - `cleanup_chats.py`: 手动清理过期聊天记录
@@ -283,7 +317,6 @@ CHAT_CLEANUP_INTERVAL_HOURS=24  # 清理任务执行间隔(小时)
 3. 生产环境部署时请修改 CORS 和 JWT 设置
 4. 定期备份数据库文件 `users.db`
 5. 系统自动执行聊天记录清理，可在 `.env` 中配置保留天数
-6. 如需添加管理员账户，可使用 `migrate_add_admin.py` 工具
 
 ## 日志和监控
 
@@ -293,6 +326,19 @@ CHAT_CLEANUP_INTERVAL_HOURS=24  # 清理任务执行间隔(小时)
 - `migrate.log`: 数据库迁移日志
 - `cleanup_logs.log`: 聊天记录清理日志
 
-## 许可证
+## 数据库环境隔离
 
-[MIT License](LICENSE)
+本项目支持生产环境和开发环境使用不同的数据库文件：
+
+- 生产环境使用：`users.db`
+- 开发环境使用：`dev_users.db`
+
+要在开发环境中测试，请在`.env`文件中设置：
+
+```
+FLASK_ENV=development
+```
+
+这样系统将自动使用`dev_users.db`作为数据库文件。如要切换回生产环境，只需将该设置注释掉或删除。
+
+**注意**：首次在开发环境运行时，会自动创建一个新的`dev_users.db`数据库文件。该文件结构与`users.db`相同，但不包含任何数据。

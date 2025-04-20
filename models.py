@@ -7,9 +7,24 @@ import random
 import string
 from datetime import datetime, timedelta, UTC
 from werkzeug.security import generate_password_hash, check_password_hash
+import os
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
 
 Base = declarative_base()
-engine = create_engine('sqlite:///users.db')
+
+# 根据环境变量选择数据库
+ENV = os.getenv('FLASK_ENV', 'production')
+if ENV == 'development':
+    db_path = 'dev_users.db'
+    print("使用开发环境数据库: dev_users.db")
+else:
+    db_path = 'users.db'
+    print("使用生产环境数据库: users.db")
+
+engine = create_engine(f'sqlite:///{db_path}')
 
 class User(Base):
     __tablename__ = 'users'

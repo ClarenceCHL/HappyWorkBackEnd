@@ -9,6 +9,10 @@ from datetime import datetime, timedelta
 import logging
 import sys
 import os
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
 
 # 配置日志
 logging.basicConfig(
@@ -21,7 +25,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def cleanup_old_chats(days=30, db_path='users.db'):
+def get_db_path():
+    """根据环境变量获取数据库路径"""
+    ENV = os.getenv('FLASK_ENV', 'production')
+    if ENV == 'development':
+        return 'dev_users.db'
+    else:
+        return 'users.db'
+
+def cleanup_old_chats(days=30, db_path=None):
     """
     清理指定天数前的聊天记录
     
@@ -29,6 +41,11 @@ def cleanup_old_chats(days=30, db_path='users.db'):
         days (int): 要保留的天数，默认为30天
         db_path (str): 数据库文件路径
     """
+    # 如果没有指定数据库路径，则根据环境变量确定
+    if db_path is None:
+        db_path = get_db_path()
+        logger.info(f"使用数据库: {db_path}")
+    
     try:
         # 计算截止日期
         cutoff_date = datetime.now() - timedelta(days=days)
